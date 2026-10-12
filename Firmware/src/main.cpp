@@ -465,8 +465,7 @@ void setup() {
   OmiPetBattery::battery.begin();
   const OmiPetBattery::BatteryMeasurement& initialBatteryReading =
       OmiPetBattery::battery.measurement();
-  OmiPetUi::setBatteryStatus(initialBatteryReading.voltageV,
-                             initialBatteryReading.percent,
+  OmiPetUi::setBatteryStatus(initialBatteryReading.percent,
                              initialBatteryReading.valid);
 
   //  初始化 LCD 并打开背光 / Initialize the LCD and enable the backlight
@@ -552,8 +551,7 @@ void loop() {
   if (OmiPetBattery::battery.update()) {
     const OmiPetBattery::BatteryMeasurement& batteryReading =
         OmiPetBattery::battery.measurement();
-    OmiPetUi::setBatteryStatus(batteryReading.voltageV,
-                               batteryReading.percent,
+    OmiPetUi::setBatteryStatus(batteryReading.percent,
                                batteryReading.valid);
     if (batteryReading.lastReadSucceeded) {
       Serial.printf("[BAT] voltage=%.3fV percent=%u adc_gpio=%u sample=ok\n",

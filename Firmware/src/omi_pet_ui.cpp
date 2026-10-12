@@ -102,7 +102,6 @@ bool gEnvironmentValid = false;
 float gTemperatureC = 0.0F;
 float gHumidityPercent = 0.0F;
 bool gBatteryValid = false;
-float gBatteryVoltageV = 0.0F;
 uint8_t gBatteryPercent = 0;
 bool gNetworkConnected = false;
 bool gNetworkProvisioning = false;
@@ -344,19 +343,15 @@ void drawVoiceStatus(bool drawFrame) {
                          kYellow, kBackground);
 }
 
-//  绘制电池电压卡片 / Draw the battery-voltage card
-void drawBatteryStatus() {
+//  仅绘制电池百分比，并按需创建卡片边框 / Draw only the battery percentage and optionally create its frame
+void drawBatteryStatus(bool drawFrame) {
   const int16_t x = kSideCardRight;
   const int16_t y = kBottomCardY;
-  drawModuleFrame(x, y, kSideCardWidth, kSideCardHeight, "BATTERY", kYellow);
-  char voltageText[12] = {};
-  if (gBatteryValid) {
-    std::snprintf(voltageText, sizeof(voltageText), "%.2fV", gBatteryVoltageV);
-  } else {
-    std::snprintf(voltageText, sizeof(voltageText), "--.--V");
+  if (drawFrame) {
+    drawModuleFrame(x, y, kSideCardWidth, kSideCardHeight, "BATTERY", kYellow);
   }
-  drawCenteredTextInArea(x + 5, kSideCardWidth - 10, y + 32, voltageText, 1,
-                         kYellow, kBackground);
+  OmiPetDisplay::lcd.fillRect(x + 5, y + 28, kSideCardWidth - 10, 24,
+                              kBackground);
   char percentText[8] = {};
   if (gBatteryValid) {
     std::snprintf(percentText, sizeof(percentText), "%u%%",
@@ -368,7 +363,7 @@ void drawBatteryStatus() {
       !gBatteryValid || gBatteryPercent <= 20U ? kRed
       : gBatteryPercent <= 40U                  ? kYellow
                                                 : kGreen;
-  drawCenteredTextInArea(x + 5, kSideCardWidth - 10, y + 44, percentText, 1,
+  drawCenteredTextInArea(x + 5, kSideCardWidth - 10, y + 35, percentText, 1,
                          percentColor, kBackground);
 }
 
@@ -384,7 +379,7 @@ void drawStaticUi() {
   drawEnvironment();
   drawNetworkStatus(true);
   drawVoiceStatus(true);
-  drawBatteryStatus();
+  drawBatteryStatus(true);
 }
 }  //  匿名命名空间 / Anonymous namespace
 
@@ -421,36 +416,15 @@ void setEnvironment(float temperatureC, float humidityPercent, bool valid) {
   }
 }
 
-//  保存电池电压并仅在显示值变化时刷新卡片 / Store battery voltage and refresh only when the displayed value changes
-void setBatteryStatus(float voltageV, uint8_t percent, bool valid) {
-  char oldVoltageText[12] = {};
-  char newVoltageText[12] = {};
-  char oldPercentText[8] = {};
-  char newPercentText[8] = {};
-  if (gBatteryValid) {
-    std::snprintf(oldVoltageText, sizeof(oldVoltageText), "%.2fV", gBatteryVoltageV);
-  } else {
-    std::snprintf(oldVoltageText, sizeof(oldVoltageText), "--.--V");
+//  保存电量状态，仅在有效性或可见百分比变化时刷新 / Store battery state and refresh only when validity or the visible percentage changes
+void setBatteryStatus(uint8_t percent, bool valid) {
+  if (gBatteryValid == valid && (!valid || gBatteryPercent == percent)) {
+    return;
   }
-  std::snprintf(oldPercentText, sizeof(oldPercentText), "%u%%",
-                static_cast<unsigned>(gBatteryPercent));
-  gBatteryVoltageV = voltageV;
   gBatteryPercent = percent;
   gBatteryValid = valid;
-  if (gBatteryValid) {
-    std::snprintf(newVoltageText, sizeof(newVoltageText), "%.2fV", gBatteryVoltageV);
-  } else {
-    std::snprintf(newVoltageText, sizeof(newVoltageText), "--.--V");
-  }
-  if (gBatteryValid) {
-    std::snprintf(newPercentText, sizeof(newPercentText), "%u%%",
-                  static_cast<unsigned>(gBatteryPercent));
-  } else {
-    std::snprintf(newPercentText, sizeof(newPercentText), "--%%");
-  }
-  if (gUiStarted && (std::strcmp(oldVoltageText, newVoltageText) != 0 ||
-                     std::strcmp(oldPercentText, newPercentText) != 0)) {
-    drawBatteryStatus();
+  if (gUiStarted) {
+    drawBatteryStatus(false);
   }
 }
 

@@ -35,7 +35,7 @@ OmiPet 是一个面向桌面陪伴场景的开源软硬件项目：它以 ESP32-
 | 麦克风 / Microphone | ICS-43434，I²S，GPIO5/6/7 |
 | 配网 / Provisioning | WiFiManager 手机网页配网 / WiFiManager captive portal |
 | 时间 / Time | NTP 联网校时，默认 UTC+8；离线显示 `--:--` 和 `----/--/--` / NTP time sync, UTC+8 default; placeholders offline |
-| 电池 / Battery | GPIO13 分压采样，显示电压和基于单节锂电静置电压的估算百分比 / GPIO13 divider sampling with voltage and estimated single-cell Li-ion percentage |
+| 电池 / Battery | GPIO13 分压采样，屏幕仅显示单节锂电估算百分比；电压保留在串口日志 / GPIO13 divider sampling; display shows estimated single-cell Li-ion percentage only, with voltage retained in serial logs |
 
 ## 麦克风与 I²S / Microphone and I²S
 
