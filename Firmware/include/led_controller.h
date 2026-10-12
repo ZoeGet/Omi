@@ -14,15 +14,15 @@ class Strip {
  public:
   //  创建 WS2812B 灯带对象 / Create the WS2812B strip object
   Strip();
-  //  初始化硬件并设置全局亮度 / Initialize hardware and set global brightness
+  //  初始化硬件并保存应用层亮度 / Initialize hardware and store application-level brightness
   void begin(uint8_t brightness = 64);
   //  清空缓存并按需立即发送 / Clear the buffer and optionally transmit immediately
   void clear(bool update = true);
   //  将缓存发送到 WS2812B / Transmit the buffer to WS2812B
   void show();
-  //  设置全局亮度，范围为 0–255 / Set global brightness from 0 to 255
+  //  设置应用层全局亮度，范围为 0–255 / Set application-level global brightness from 0 to 255
   void setBrightness(uint8_t brightness);
-  //  获取当前全局亮度 / Get current global brightness
+  //  获取当前应用层全局亮度 / Get the current application-level global brightness
   uint8_t brightness() const;
   //  按 RGB 设置单颗灯珠缓存 / Set one pixel in the buffer by RGB
   void setPixel(uint16_t index, uint8_t red, uint8_t green, uint8_t blue);
@@ -70,6 +70,8 @@ class EffectController {
   void begin();
   //  在主循环中推进动画 / Advance animation from the main loop
   void update();
+  //  立即按当前模式完整重绘一帧 / Immediately redraw one complete frame for the current mode
+  void refresh();
   //  设置颜色并切换到常亮 / Set color and switch to solid mode
   void setSolid(uint8_t red, uint8_t green, uint8_t blue);
   //  用当前颜色切换到常亮 / Switch to solid mode using current color

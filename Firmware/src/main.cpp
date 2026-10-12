@@ -75,7 +75,7 @@ bool executeLedCommand(int commandId) {
           0, std::min(static_cast<int>(OmiPetLed::strip.brightness()) + 16,
                       255));
       OmiPetLed::strip.setBrightness(static_cast<uint8_t>(updatedBrightness));
-      OmiPetLed::strip.show();
+      OmiPetLed::effects.refresh();
       Serial.printf("[LED] brightness=%d command=increase\n",
                     updatedBrightness);
       return true;
@@ -85,7 +85,7 @@ bool executeLedCommand(int commandId) {
           0, std::min(static_cast<int>(OmiPetLed::strip.brightness()) - 16,
                       255));
       OmiPetLed::strip.setBrightness(static_cast<uint8_t>(updatedBrightness));
-      OmiPetLed::strip.show();
+      OmiPetLed::effects.refresh();
       Serial.printf("[LED] brightness=%d command=decrease\n",
                     updatedBrightness);
       return true;
@@ -385,6 +385,7 @@ void updateCommandAudioFrames() {
                     static_cast<unsigned long>(millis()),
                     static_cast<unsigned long>(millis() - detectFinishedAtMs));
       OmiPetAudio::multiNetCommandRecognizer.reset();
+      gCommandAudioBuffer.reset();
       OmiPetVoice::voice.notifyCommandCompleted();
     }
     //  每帧主动让出 CPU，确保系统空闲任务和看门狗获得调度 / Yield after each frame so idle tasks and the watchdog can run

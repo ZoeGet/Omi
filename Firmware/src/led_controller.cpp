@@ -91,14 +91,21 @@ uint8_t levelFromSweepGradient(float gradient) {
 
 }  //  匿名命名空间 / Anonymous namespace
 
+//  按应用层亮度缩放颜色，避免调用 NeoPixel 的有损 setBrightness() / Scale colors at the application layer to avoid NeoPixel's lossy setBrightness()
+static uint8_t applyBrightness(uint8_t component, uint8_t brightness) {
+  return static_cast<uint8_t>(
+      (static_cast<uint16_t>(component) * brightness + 127U) / 255U);
+}
+
 //  创建底层 NeoPixel 对象：13 颗灯、GPIO47、GRB 顺序、800 kHz 协议 / Create the NeoPixel object: 13 LEDs, GPIO47, GRB order, and 800 kHz protocol
 Strip::Strip() : pixels_(kLedCount, kDataPin, NEO_GRB + NEO_KHZ800) {}
 
-//  初始化 WS2812B 外设并设置全局亮度 / Initialize the WS2812B peripheral and set global brightness
+//  初始化 WS2812B 外设并保存应用层亮度 / Initialize the WS2812B peripheral and store application-level brightness
 void Strip::begin(uint8_t brightness) {
-  //  初始化 NeoPixel 外设并设置全局亮度；全局亮度由库在发送时统一缩放 / Initialize NeoPixel and set global brightness; the library scales output during transmission
+  //  禁用 NeoPixel 内部缩放，所有颜色都由本类完整写入后再发送 / Disable NeoPixel's internal scaling; this class writes every complete frame before transmission
   pixels_.begin();
-  setBrightness(brightness);
+  brightness_ = brightness;
+  pixels_.setBrightness(255);
   //  上电先清空缓存并发送黑帧，避免灯带保留上一次的随机状态 / Clear and transmit a black frame at boot to avoid stale or random LED state
   clear(false);
   show();
@@ -119,11 +126,10 @@ void Strip::show() {
   pixels_.show();
 }
 
-//  更新 NeoPixel 库使用的全局亮度 / Update the global brightness used by NeoPixel
+//  更新应用层保存的全局亮度 / Update the application-level global brightness
 void Strip::setBrightness(uint8_t brightness) {
-  //  这是整条灯带的全局亮度，不会改变动画保存的 RGB 颜色 / This is strip-wide brightness and does not change the RGB color stored by the animation
+  //  只保存亮度，不改写 NeoPixel 内部缓存，避免反复缩放造成颜色失真 / Store brightness without rewriting NeoPixel RAM, preventing repeated scaling from distorting colors
   brightness_ = brightness;
-  pixels_.setBrightness(brightness_);
 }
 
 //  返回当前全局亮度值 / Return the current global brightness value
@@ -134,7 +140,9 @@ void Strip::setPixel(uint16_t index, uint8_t red, uint8_t green,
                      uint8_t blue) {
   //  先写入缓存，不在单颗灯珠更新时发送；调用方完成整帧后再 show() / Write the buffer without transmitting; the caller calls show() after building the whole frame
   if (index < kLedCount) {
-    pixels_.setPixelColor(index, pixels_.Color(red, green, blue));
+    pixels_.setPixelColor(index, pixels_.Color(
+        applyBrightness(red, brightness_), applyBrightness(green, brightness_),
+        applyBrightness(blue, brightness_)));
   }
 }
 
@@ -142,7 +150,9 @@ void Strip::setPixel(uint16_t index, uint8_t red, uint8_t green,
 void Strip::setPixel(uint16_t index, uint32_t colorValue) {
   //  允许动画直接写入 NeoPixel 打包颜色 / Allow effects to write a packed NeoPixel color directly
   if (index < kLedCount) {
-    pixels_.setPixelColor(index, colorValue);
+    setPixel(index, static_cast<uint8_t>(colorValue >> 16),
+             static_cast<uint8_t>(colorValue >> 8),
+             static_cast<uint8_t>(colorValue));
   }
 }
 
@@ -154,8 +164,10 @@ void Strip::fill(uint8_t red, uint8_t green, uint8_t blue, bool update) {
 
 //  用打包颜色值填充整条灯带 / Fill the entire strip with a packed color
 void Strip::fill(uint32_t colorValue, bool update) {
-  //  一次填满全部 LED；动画需要逐颗渐变时使用 setPixel() / Fill all LEDs at once; use setPixel() when per-pixel gradients are needed
-  pixels_.fill(colorValue, 0, kLedCount);
+  //  逐颗写入经过亮度缩放的颜色，确保每次都是从完整 RGB 状态重新渲染 / Write scaled colors pixel by pixel so every frame starts from complete RGB state
+  for (uint16_t index = 0; index < kLedCount; ++index) {
+    setPixel(index, colorValue);
+  }
   if (update) {
     show();
   }
@@ -166,8 +178,8 @@ void Strip::setPixelHSV(uint16_t index, uint8_t hue, uint8_t saturation,
                         uint8_t value) {
   //  HSV 更适合彩虹动画：只改变 hue 就能连续移动色相 / HSV suits rainbow animation because changing hue alone moves the color continuously
   if (index < kLedCount) {
-    pixels_.setPixelColor(index, pixels_.ColorHSV(
-        static_cast<uint16_t>(hue) * 256U, saturation, value));
+    setPixel(index, pixels_.ColorHSV(static_cast<uint16_t>(hue) * 256U,
+                                     saturation, value));
   }
 }
 
@@ -211,6 +223,14 @@ void EffectController::update() {
   }
   //  主循环只负责调用 update()；具体帧率和渲染由 render() 控制 / The main loop only calls update(); render() controls frame timing and drawing
   render(millis(), false);
+}
+
+//  立即重绘当前模式，用于亮度变化后从未缩放的颜色状态重新输出 / Immediately redraw the current mode after brightness changes from the complete color state
+void EffectController::refresh() {
+  if (!initialized_) {
+    return;
+  }
+  render(millis(), true);
 }
 
 //  切换到指定 RGB 颜色的常亮模式 / Switch to solid mode with the requested RGB color
