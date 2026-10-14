@@ -190,6 +190,10 @@ WakeNet 是专门的唤醒模型，但当前 ESP-SR 模型包中的现成模型�
 
 这些文件共同组成当前语音架构；不能因为没有使用 WakeNet 就删除 `CMakeLists.txt`、`sdkconfig.defaults` 或整个 `esp-sr` 目录。
 
+## Codex 状态采集实验 / Codex Monitoring Experiment
+
+Windows 主机端工具见 [Tools/CodexMonitor](Tools/CodexMonitor/README.md)：通过本地 Hook 采集多会话生命周期与审批状态，提供隐私保护、回归测试和只读诊断。当前仍是实验状态源，未接入设备灯带或 USB/Wi-Fi 控制；来源不明时保留未确认状态。
+
 ## 硬件资料 / Hardware Resources
 
 - [原理图 / Schematic](Hardware/Schematic/Omi_Schematic.pdf)
