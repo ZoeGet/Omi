@@ -1,5 +1,7 @@
 # OmiPet
 
+源码提交、隐私排除和逐批推送要求见 [CONTRIBUTING.md](CONTRIBUTING.md)。本地安装包、实验日志和设备凭证不属于源码提交范围。
+
 OmiPet 是一个面向桌面陪伴场景的开源软硬件项目：它以 ESP32-S3 为核心，集成横向显示的彩色 LCD、温湿度传感器、灯带、蜂鸣器和数字麦克风，逐步实现桌面宠物、环境感知和离线语音交互。
 
 > **English** — OmiPet is an open-source desktop companion project built around an ESP32-S3. It combines a landscape-oriented color LCD, environmental sensing, addressable LEDs, a buzzer, and an I²S digital microphone with an experimental offline voice interaction path.
@@ -79,11 +81,11 @@ OmiPetAudio::microphone.begin(
 
 ### 语音交互状态 / Voice interaction state
 
-当前固件使用 `16 kHz`、`16-bit`、单声道 PCM，将每次 `160` 个采样点的输入帧送入 AFE；AFE 以约 `512` 个采样点的输出帧驱动中文 MultiNet `mn6_cn`。词表包含灯带颜色/动效、亮度控制短语和自定义入口“老鼠狒狒”（命令 ID `1`）。识别到入口后，状态机播放约 `180 ms` 的三段式确认反馈，并进入 `LISTENING` 等待灯带控制指令。
+当前固件使用 `16 kHz`、`16-bit`、单声道 PCM，将每次 `160` 个采样点的输入帧送入 AFE；AFE 以约 `512` 个采样点的输出帧驱动中文 MultiNet `mn6_cn`。词表包含灯带颜色/动效、亮度控制短语和自定义入口“老鼠狒狒”（命令 ID `1`）。识别到入口后，状态机播放约 `180 ms` 的三段式确认反馈，进入 `LISTENING` 等待灯带控制指令，同时用独立的白色跑马灯表示已唤醒；命令执行或等待超时后结束这一临时提示。
 
 ### 灯带颜色与动效 / LED Colors and Effects
 
-唤醒后说出颜色或动效命令即可切换灯带。颜色命令会保留当前动效，不会强制切换成常亮；彩色灯光使用彩虹动效，呼吸灯、跑马灯和扩散灯由主循环以非阻塞方式推进，使用约 `12 ms` 的时间驱动帧。三个动效默认使用纯色：呼吸灯为纯蓝、跑马灯为纯绿、扩散灯为纯红；动画只改变亮度，不把其他颜色混入当前颜色。跑马灯和扩散灯始终保留全灯带底光，并用连续渐变高光移动，避免灯珠逐颗跳变或完全熄灭。支持的动效说法包括“彩色”“彩色灯光”“彩色灯”“呼吸灯”“跑马灯”“扩散灯”；RGB 语音词条已删除；颜色命令支持“红色灯光/红色灯”等表达；还支持“开灯”“开启灯光”“一直亮”“关灯”和“关闭灯光”。亮度命令仍以 `16/255` 为步长调整全局亮度，“调亮一点/调暗一点”中的“调”使用拼音 `tiao`。
+唤醒后说出颜色或动效命令即可切换灯带。颜色命令会保留原本的本地动效，不会强制切换成常亮；唤醒期间的白色跑马灯是独立提示，不会把后续“蓝色灯光”变成蓝色跑马灯。彩色灯光使用彩虹动效，呼吸灯、跑马灯和扩散灯由主循环以非阻塞方式推进，使用约 `12 ms` 的时间驱动帧。三个由命令启动的动效默认使用纯色：呼吸灯为纯蓝、跑马灯为纯绿、扩散灯为纯红；动画只改变亮度，不把其他颜色混入当前颜色。跑马灯和扩散灯始终保留全灯带底光，并用连续渐变高光移动，避免灯珠逐颗跳变或完全熄灭。支持的动效说法包括“彩色”“彩色灯光”“彩色灯”“呼吸灯”“跑马灯”“扩散灯”；RGB 语音词条已删除；颜色命令支持“红色灯光/红色灯”等表达；还支持“开灯”“开启灯光”“一直亮”“关灯”和“关闭灯光”。亮度命令仍以 `16/255` 为步长调整全局亮度，“调亮一点/调暗一点”中的“调”使用拼音 `tiao`。
 
 > **English** — After the custom wake entry, use colorful lights, breathing lights, running lights, or expanding lights. Color commands keep the active effect instead of forcing solid mode. The default effect colors are pure blue for breathing, pure green for running lights, and pure red for expanding lights; animation changes brightness without mixing hues. Running and expanding effects keep a base light on every pixel and add a smooth moving gradient. The brightness commands use `tiao` for 调, as in `tiao liang yi dian` and `tiao an yi dian`.
 
@@ -192,7 +194,15 @@ WakeNet 是专门的唤醒模型，但当前 ESP-SR 模型包中的现成模型�
 
 ## Codex 状态采集实验 / Codex Monitoring Experiment
 
-Windows 主机端工具见 [Tools/CodexMonitor](Tools/CodexMonitor/README.md)：通过本地 Hook 采集多会话生命周期与审批状态，提供隐私保护、回归测试和只读诊断。当前仍是实验状态源，未接入设备灯带或 USB/Wi-Fi 控制；来源不明时保留未确认状态。
+Windows 主机端工具见 [Tools/CodexMonitor](Tools/CodexMonitor/README.md)：通过本地 Hook 采集多会话生命周期与审批状态，提供隐私保护、回归测试和只读诊断。用户 Hook 现启用可回退的事件关联侧文件；只有新事件与真实宿主配对的会话可进入显式状态实验，历史会话保持 unknown。Wi-Fi 传输仍待实现。
+
+Windows 上位机见 [Tools/Desktop](Tools/Desktop/README.md)：浅色侧栏、卡片式设备概览、圆形颜色预设、亮度百分比和六种灯效；统一 USB 连接、本地灯光、Codex 监控及诊断，按固件能力启用控件。监控模式禁止手动调灯。无线配对页目前显示未就绪，设备认证和 WSS 仍待接入。
+
+USB/Wi-Fi 共用协议、主机端与模拟器见 [Tools/DeviceBridge](Tools/DeviceBridge/README.md)。2026-10-15 COM17 已更新隔离固件：监控中无事件/完成/来源异常均为绿色扩散，工作红色扩散，待审批黄色扩散；连接断开或租约到期关灯。绿色是未知状态的显示策略，协议仍保留 unknown；仅有效观测显示红/黄。重新握手期间保持熄灯，收到快照恢复监控；主动切本地恢复原灯效。语音优先，唤醒用白色跑马灯退出监控。新策略通过 15 项 USB 协议/设备日志检查，物理拔线和新版目视待复核。此前三色、语音和旧版拔线回退经用户实测；30 分钟桥接曾恢复 7 次短断线，长期稳定仍待确认。稳定配置关闭实验，未安装后台桥接。
+
+固件另有默认关闭的协议接收诊断实验，只检查整帧与信封并隔离帧内 `w`，不执行控灯或返回成功确认；当前稳定构建仍使用原串口调试路径。
+
+独立固件协议核心已通过 USB 实验入口生成 welcome/ACK、校验快照并处理去重和过期；挑战校验用设备单调时钟扣除心跳至快照的耗时。当前隔离固件保留 `isPlugged()` 断线诊断，新增监控熄灯锁存与 `monitorOutput`，区分协议 local 和实际断联关灯。主机握手已处理积压欢迎帧和旧通道 ACK。硬件发送背压与长期稳定仍待验证，参数及回退记录见工具文档。
 
 ## 硬件资料 / Hardware Resources
 
