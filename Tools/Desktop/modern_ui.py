@@ -1,5 +1,6 @@
 import colorsys
 import tkinter as tk
+from tkinter import font as tkfont
 from tkinter import ttk
 
 from app import EFFECTS, LegacyDesktopApp
@@ -16,6 +17,7 @@ GREEN = "#20A66A"
 RED = "#E45D64"
 YELLOW = "#DBA32C"
 FONT = "Microsoft YaHei UI"
+MODES = (("local", "本地灯光"), ("monitor", "Codex 监控"))
 
 
 def rounded(canvas, x1, y1, x2, y2, radius, **kwargs):
@@ -38,6 +40,13 @@ class Card(tk.Canvas):
         self.body = tk.Frame(self, bg=WHITE)
         self.slot = self.create_window(padding, padding, window=self.body, anchor="nw")
         self.bind("<Configure>", self.layout)
+        self.minimum_height = height
+        self.body.bind("<Configure>", self.fit_content)
+
+    def fit_content(self, event=None):
+        needed = max(self.minimum_height, self.body.winfo_reqheight() + 2 * self.padding)
+        if int(self.cget("height")) != needed:
+            self.configure(height=needed)
 
     def layout(self, event=None):
         width, height = self.winfo_width(), self.winfo_height()
@@ -128,6 +137,65 @@ class Navigation(tk.Canvas):
         self.create_text(51, 23, text=self.caption, fill=color, anchor="w", font=(FONT, 10, "bold" if self.selected else "normal"))
 
 
+class ModeRow(Button):
+    def __init__(self, parent, text, command):
+        self.selected = False
+        height = max(48, tkfont.Font(parent, family=FONT, size=10).metrics("linespace") + 20)
+        super().__init__(parent, text, command, width=300, height=height)
+
+    def invoke(self, event=None):
+        if not self.selected:
+            super().invoke(event)
+
+    def paint(self, event=None):
+        self.delete("all")
+        width = self.winfo_width() if self.winfo_width() > 1 else int(self.cget("width"))
+        height = int(self.cget("height"))
+        disabled = str(self.cget("state")) == "disabled"
+        fill = PALE if self.selected else "#F6F8FB"
+        color = "#53647C" if disabled else INK
+        accent = "#A8B8CE" if disabled else BLUE
+        border = BLUE if self.focus_get() is self and not disabled else fill
+        rounded(self, 1, 1, width - 1, height - 1, 10, fill=fill, outline=border)
+        cy = height / 2
+        self.create_oval(15, cy - 8, 31, cy + 8, outline=accent, width=2)
+        self.create_polygon(22, cy - 4, 22, cy + 4, 27, cy, fill=accent, outline="")
+        self.create_text(45, cy, text=self.caption, anchor="w", fill=color, font=(FONT, 10))
+        x = width - 57
+        track = accent if self.selected else "#CBD4E2"
+        rounded(self, x, cy - 12, x + 42, cy + 12, 12, fill=track, outline="")
+        knob = x + 30 if self.selected else x + 12
+        self.create_oval(knob - 9, cy - 9, knob + 9, cy + 9, fill=WHITE, outline="")
+
+
+class PageViewport(tk.Frame):
+    def __init__(self, parent):
+        super().__init__(parent, bg=BG)
+        self.columnconfigure(0, weight=1)
+        self.rowconfigure(0, weight=1)
+        self.canvas = tk.Canvas(self, bg=BG, bd=0, highlightthickness=0, width=1, height=1)
+        self.canvas.grid(row=0, column=0, sticky="nsew")
+        self.scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
+        self.scrollbar.grid(row=0, column=1, sticky="ns", padx=(8, 0))
+        self.content = tk.Frame(self.canvas, bg=BG)
+        self.slot = self.canvas.create_window(0, 0, window=self.content, anchor="nw")
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+        self.canvas.bind("<Configure>", self.resize)
+        self.content.bind("<Configure>", self.resize)
+        self.winfo_toplevel().bind("<MouseWheel>", self.wheel, add=True)
+
+    def resize(self, event=None):
+        width = max(1, self.canvas.winfo_width())
+        self.canvas.itemconfigure(self.slot, width=width)
+        self.canvas.configure(scrollregion=(0, 0, width, self.content.winfo_reqheight()))
+
+    def wheel(self, event):
+        if (str(event.widget).startswith(str(self)) and not isinstance(event.widget, tk.Text)
+                and self.canvas.yview() != (0.0, 1.0)):
+            self.canvas.yview_scroll(-int(event.delta / 120), "units")
+            return "break"
+
+
 class Swatch(Button):
     def __init__(self, parent, color, command):
         self.color = color
@@ -200,7 +268,7 @@ class ModernDesktopApp(LegacyDesktopApp):
         self.navigation["settings"] = settings_nav
         tk.Frame(bottom, bg="#E0E6F0", height=1).pack(fill="x", padx=10, pady=16)
         label(bottom, "OmiPet Desktop", size=9, color=MUTED).pack(anchor="w", padx=12)
-        label(bottom, "0.2  ·  USB 预览版", size=8, color="#A2ACBB").pack(anchor="w", padx=12, pady=(3, 0))
+        label(bottom, "0.3  ·  USB 控制台", size=8, color="#A2ACBB").pack(anchor="w", padx=12, pady=(3, 0))
 
         main = tk.Frame(self.window, bg=BG)
         main.pack(side="left", fill="both", expand=True)
@@ -220,10 +288,10 @@ class ModernDesktopApp(LegacyDesktopApp):
         heading.pack(fill="x", pady=(0, 13))
         label(heading, variable=self.page_title, size=21, bold=True).pack(anchor="w")
         label(heading, variable=self.page_subtitle, size=9, color=MUTED).pack(anchor="w", pady=(6, 0))
-        self.page_host = tk.Frame(area, bg=BG)
+        self.page_host = PageViewport(area)
         self.page_host.pack(fill="both", expand=True)
         for name in ("overview", "lights", "pairing", "diagnostics", "settings"):
-            page = tk.Frame(self.page_host, bg=BG)
+            page = tk.Frame(self.page_host.content, bg=BG)
             self.pages[name] = page
         self._overview_page(self.pages["overview"])
         self._lighting_page(self.pages["lights"])
@@ -269,11 +337,14 @@ class ModernDesktopApp(LegacyDesktopApp):
         body = mode.body
         self._heading(body, "控制模式", "选择灯光由你控制，或跟随 Codex 状态")
         choices = tk.Frame(body, bg=WHITE)
-        choices.pack(fill="x", pady=(20, 16))
-        self.local_button = Button(choices, "本地灯光", lambda: self.command("local"), width=140)
-        self.local_button.pack(side="left", fill="x", expand=True, padx=(0, 8))
-        self.monitor_button = Button(choices, "Codex 监控", lambda: self.command("monitor"), width=140)
-        self.monitor_button.pack(side="left", fill="x", expand=True)
+        choices.pack(fill="x", pady=(15, 10))
+        self.mode_rows = {}
+        for key, title in MODES:
+            row = ModeRow(choices, title, lambda value=key: self.command(value))
+            row.pack(fill="x", pady=(0, 8))
+            self.mode_rows[key] = row
+        self.local_button = self.mode_rows["local"]
+        self.monitor_button = self.mode_rows["monitor"]
         label(body, variable=self.mode_hint, size=9, color=MUTED, wraplength=350, justify="left").pack(anchor="w")
 
         status = Card(page, height=210)
@@ -300,7 +371,10 @@ class ModernDesktopApp(LegacyDesktopApp):
         self._heading(body, "灯光空间", "自定义属于你的桌面氛围")
         self.quick_preview = tk.Canvas(body, height=42, bg=WHITE, highlightthickness=0)
         self.quick_preview.pack(fill="x", pady=(6, 4))
-        label(body, variable=self.preview_note, size=8, color=MUTED).pack(anchor="w")
+        self.quick_preview.bind("<Configure>", lambda _: self._preview())
+        self.preview_summary = label(body, variable=self.preview_note, size=10, color="#637187", pady=4, justify="left")
+        self.preview_summary.pack(fill="x")
+        self.preview_summary.bind("<Configure>", lambda event: self.preview_summary.configure(wraplength=max(1, event.width)))
         Button(body, "调整灯光  →", lambda: self.show_page("lights"), width=143, height=34).pack(anchor="e", pady=(6, 0))
 
         metrics = Card(page, height=85, padding=16)
@@ -433,6 +507,7 @@ class ModernDesktopApp(LegacyDesktopApp):
             self.navigation[key].selected = key == name
             self.navigation[key].paint()
         self.pages[name].pack(fill="both", expand=True)
+        self.page_host.canvas.yview_moveto(0)
         self.page_title.set(titles[name][0])
         self.page_subtitle.set(titles[name][1])
         self.window.after_idle(self._preview)
@@ -442,13 +517,17 @@ class ModernDesktopApp(LegacyDesktopApp):
         monitoring = self.snapshot.get("monitorRequested", False)
         supported = "light" in self.snapshot.get("operations", ())
         enabled = active and not monitoring and supported
+        for row in self.mode_rows.values():
+            row.selected = False
+            row.configure(state="disabled")
         self.local_button.configure(state="normal" if active else "disabled")
         monitor_ready = self.snapshot.get("monitorLights") and self.snapshot.get("monitorGreenOff")
         self.mode_hint.set("请更新设备固件，以启用新的监控灯光规则。" if self.connected and not monitor_ready
                            else "监控中锁定手动调灯，语音可接管。")
         self.monitor_button.configure(state="normal" if active and monitor_ready else "disabled")
-        self.local_button.variant = "selected" if not monitoring else "outline"
-        self.monitor_button.variant = "accent" if monitoring else "outline"
+        confirmed_state = self.snapshot.get("state") or {}
+        self.local_button.selected = not monitoring and confirmed_state.get("mode") == "local"
+        self.monitor_button.selected = monitoring and confirmed_state.get("monitorOutput") == "connected"
         self.local_button.paint()
         self.monitor_button.paint()
         for widget in (self.color_button, self.apply_button, self.brightness_scale, *self.swatch_buttons, *self.effect_tiles.values()):
