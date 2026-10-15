@@ -90,7 +90,12 @@ constexpr int16_t kCenterCardHeight = kScreenHeight - kTopCardY * 2;
 constexpr int16_t kCardRadius = 9;
 char gRenderedClockText[6] = {};
 char gRenderedDateText[11] = {};
+char gRenderedPairingCountdown[6] = {};
 bool gDateTimeRendered = false;
+bool gPairingCountdownRendered = false;
+bool gPairingVisible = false;
+char gPairingCode[7] = {};
+uint16_t gPairingSecondsRemaining = 0;
 bool gDateTimeValid = false;
 int gDateTimeYear = 0;
 int gDateTimeMonth = 0;
@@ -202,6 +207,7 @@ void drawChangedText(int16_t x, int16_t y, const char* text, uint8_t scale,
 
 //  更新时间和日期，只重绘发生变化的字符 / Update time and date, redrawing only changed characters
 void drawDateTime() {
+  if (gPairingVisible) return;
   char clockText[6] = {};
   char dateText[11] = {};
   formatDateTimeTexts(clockText, sizeof(clockText), dateText, sizeof(dateText));
@@ -219,6 +225,41 @@ void drawDateTime() {
   drawChangedText(dateX, kDateY, dateText, kDateScale, gRenderedDateText,
                   sizeof(gRenderedDateText), kWhite, gDateTimeRendered);
   gDateTimeRendered = true;
+}
+
+//  只刷新配对倒计时中发生变化的数字 / Refresh only the changed pairing-countdown digits
+void drawPairingCountdown() {
+  char countdown[6] = "00:00";
+  const uint8_t minutes =
+      static_cast<uint8_t>((gPairingSecondsRemaining / 60U) % 100U);
+  const uint8_t seconds =
+      static_cast<uint8_t>(gPairingSecondsRemaining % 60U);
+  countdown[0] = static_cast<char>('0' + minutes / 10U);
+  countdown[1] = static_cast<char>('0' + minutes % 10U);
+  countdown[3] = static_cast<char>('0' + seconds / 10U);
+  countdown[4] = static_cast<char>('0' + seconds % 10U);
+  constexpr uint8_t kScale = 2;
+  const int16_t x = kCenterCardLeft +
+      (kCenterCardWidth - textWidth(countdown, kScale)) / 2;
+  drawChangedText(x, 108, countdown, kScale, gRenderedPairingCountdown,
+                  sizeof(gRenderedPairingCountdown), kYellow,
+                  gPairingCountdownRendered);
+  gPairingCountdownRendered = true;
+}
+
+//  在中央卡片单独绘制配对码，避免侧边状态和语音提示被覆盖 / Draw the pairing code in the center card without covering side status or voice feedback
+void drawPairingCard() {
+  OmiPetDisplay::lcd.fillRect(kCenterCardLeft + 2, kCenterCardTop + 2,
+                              kCenterCardWidth - 4, kCenterCardHeight - 4,
+                              kBackground);
+  drawCenteredTextInArea(kCenterCardLeft, kCenterCardWidth, 20,
+                         "PAIR CODE", 1, kAccent);
+  drawCenteredTextInArea(kCenterCardLeft, kCenterCardWidth, 51,
+                         gPairingCode, 4, kWhite);
+  drawCenteredTextInArea(kCenterCardLeft, kCenterCardWidth, 91,
+                         "EXPIRES", 1, kYellow);
+  gPairingCountdownRendered = false;
+  drawPairingCountdown();
 }
 
 //  把摄氏温度格式化为带一位小数的屏幕文本 / Format Celsius temperature as one-decimal display text
@@ -372,9 +413,13 @@ void drawStaticUi() {
   OmiPetDisplay::lcd.fillScreen(kBackground);
   drawModuleFrame(kCenterCardLeft, kCenterCardTop, kCenterCardWidth,
                   kCenterCardHeight, "", kAccent);
-  drawCenteredTextInArea(kCenterCardLeft, kCenterCardWidth, 19, "OMIPET", 1,
-                         kAccent, kBackground);
-  drawDateTime();
+  if (gPairingVisible) {
+    drawPairingCard();
+  } else {
+    drawCenteredTextInArea(kCenterCardLeft, kCenterCardWidth, 19, "OMIPET", 1,
+                           kAccent, kBackground);
+    drawDateTime();
+  }
 
   drawEnvironment();
   drawNetworkStatus(true);
@@ -479,8 +524,51 @@ void setVoiceStatus(const char* statusText) {
     drawVoiceStatus(false);
   }
 }
+
+//  只接受恰好六位数字；清除后恢复原时钟和日期 / Accept exactly six decimal digits; restore the clock and date when cleared
+void setPairingCode(const char* sixDigits, uint16_t secondsRemaining) {
+  bool valid = sixDigits != nullptr && secondsRemaining > 0U &&
+               secondsRemaining <= 300U && std::strlen(sixDigits) == 6U;
+  if (valid) {
+    for (size_t index = 0; index < 6; ++index) {
+      if (sixDigits[index] < '0' || sixDigits[index] > '9') valid = false;
+    }
+  }
+  if (!valid) {
+    if (!gPairingVisible) return;
+    gPairingVisible = false;
+    volatile char* codeBytes = gPairingCode;
+    for (size_t index = 0; index < sizeof(gPairingCode); ++index) {
+      codeBytes[index] = '\0';
+    }
+    gPairingSecondsRemaining = 0;
+    gPairingCountdownRendered = false;
+    if (gUiStarted) {
+      OmiPetDisplay::lcd.fillRect(kCenterCardLeft + 2, kCenterCardTop + 2,
+                                  kCenterCardWidth - 4, kCenterCardHeight - 4,
+                                  kBackground);
+      drawCenteredTextInArea(kCenterCardLeft, kCenterCardWidth, 19, "OMIPET",
+                             1, kAccent);
+      gDateTimeRendered = false;
+      drawDateTime();
+    }
+    return;
+  }
+
+  const bool codeChanged = !gPairingVisible ||
+                           std::strcmp(gPairingCode, sixDigits) != 0;
+  if (!codeChanged && gPairingSecondsRemaining == secondsRemaining) return;
+  gPairingVisible = true;
+  gPairingSecondsRemaining = secondsRemaining;
+  if (codeChanged) {
+    std::memcpy(gPairingCode, sixDigits, sizeof(gPairingCode));
+    if (gUiStarted) drawPairingCard();
+  } else if (gUiStarted) {
+    drawPairingCountdown();
+  }
+}
 //  保留 UI 更新入口，时间内容由联网时间状态驱动 / Keep the UI update entry point driven by network time state
 void update() {
-  drawDateTime();
+  if (!gPairingVisible) drawDateTime();
 }
 }  //  OmiPetUi 命名空间 / OmiPetUi namespace
