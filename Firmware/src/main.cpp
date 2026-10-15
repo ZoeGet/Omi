@@ -6,7 +6,11 @@
 #include "battery_monitor.h"
 #include "buzzer.h"
 #include "NV3007_Display.h"
+#include "device_protocol_experiment.h"
 #include "led_controller.h"
+#if OMIPET_MONITOR_LIGHTS
+#include "led_arbitration.h"
+#endif
 #include "omi_pet_ui.h"
 #include "time_service.h"
 #include "wifi_manager.h"
@@ -65,6 +69,44 @@ uint32_t gSpeechStartAtMs = 0;  //  当前语音片段开始时间 / Start time 
 uint32_t gSpeechStopAtMs = 0;  //  当前语音片段结束时间 / End time of the current speech segment
 uint32_t gWakeAcceptedAtMs = 0;  //  最近一次唤醒被状态机接受的时间 / Time when the latest wake was accepted
 bool gSpeechTimingValid = false;  //  当前语音时间戳是否有效 / Whether current speech timestamps are valid
+bool gWakeLightActive = false;  //  唤醒后等待指令时显示独立的白色跑马灯 / Show an independent white sweep while awaiting a command
+#if OMIPET_DESKTOP_CONTROL
+bool gVoiceLightAppliedThisLoop = false;  //  同一轮循环内语音动作优先于上位机设置 / Give a voice action priority over desktop settings in the same loop
+#endif
+OmiPetLed::EffectController gWakeEffects(OmiPetLed::strip);  //  避免唤醒提示改写原本灯效 / Keep the wake indication separate from the saved local effect
+
+#if OMIPET_MONITOR_LIGHTS
+OmiPetLed::VoiceLightOverride gVoiceLightOverride;  //  语音接管保持到远端退出 / Voice takeover lasts until remote exit
+OmiPetLed::LightOwner gLightOwner = OmiPetLed::LightOwner::Local;  //  上一帧的物理输出归属 / Physical output owner of the prior frame
+OmiPetLed::MonitorLightStatus gMonitorLightStatus = OmiPetLed::MonitorLightStatus::Unknown;  //  上一帧监控状态 / Prior monitor status
+OmiPetLed::EffectController gMonitorEffects(OmiPetLed::strip);  //  与本地灯效分离的监控扩散时间轴 / Separate monitor-expansion timeline from local effects
+#endif
+
+//  唤醒被接受后立即由白色跑马灯接管，保留此前本地灯效供退出时恢复 / Show a white wake sweep immediately and preserve the prior local effect for restoration
+void beginWakeLight() {
+#if OMIPET_MONITOR_LIGHTS
+  if (gLightOwner == OmiPetLed::LightOwner::Monitor) {
+    Serial.println("[LED] owner=local reason=voice");
+  }
+  gVoiceLightOverride.onVoiceInteraction();
+#if OMIPET_MONITOR_GREEN_OFF
+  OmiPetProtocol::yieldUsbMonitorToVoice();
+#endif
+  gLightOwner = OmiPetLed::LightOwner::Local;
+#endif
+  gWakeLightActive = true;
+  gWakeEffects.begin();
+  gWakeEffects.setSweep(255, 255, 255);
+  Serial.println("[LED] owner=voice effect=sweep color=white");
+}
+
+//  唤醒等待结束时重绘原本本地灯效 / Restore the saved local effect when wake listening ends
+void finishWakeLight() {
+  if (!gWakeLightActive) return;
+  gWakeLightActive = false;
+  OmiPetLed::effects.refresh();
+  Serial.println("[LED] owner=local reason=voice-ended");
+}
 
 //  执行一个已识别的灯带命令 / Execute one recognized LED command
 bool executeLedCommand(int commandId) {
@@ -355,6 +397,7 @@ void updateCommandAudioFrames() {
       gCommandAudioBuffer.reset();
       Serial.println("[VOICE] continuous wake phrase detected");
       if (OmiPetVoice::voice.notifyWakeWordDetected()) {
+        beginWakeLight();
         gWakeAcceptedAtMs = millis();
         Serial.printf("[TIMING] wake_accepted ms=%lu\n",
                       static_cast<unsigned long>(gWakeAcceptedAtMs));
@@ -377,10 +420,18 @@ void updateCommandAudioFrames() {
           static_cast<unsigned long>(detectFinishedAtMs - detectStartedAtMs),
           static_cast<unsigned long>(speechAgeMs),
           static_cast<unsigned long>(wakeAgeMs));
+      //  命令在保留的本地灯效上执行，唤醒提示只在等待阶段显示 / Apply the command to the saved local effect; the wake sweep lasts only while listening
+      const bool hadWakeLight = gWakeLightActive;
+      gWakeLightActive = false;
       const bool executed = executeLedCommand(commandId);
       if (!executed) {
+        gWakeLightActive = hadWakeLight;
         continue;
       }
+#if OMIPET_DESKTOP_CONTROL
+      gVoiceLightAppliedThisLoop = true;
+#endif
+      if (hadWakeLight) OmiPetLed::effects.refresh();
       Serial.printf("[TIMING] command_executed ms=%lu detect_to_led_ms=%lu\n",
                     static_cast<unsigned long>(millis()),
                     static_cast<unsigned long>(millis() - detectFinishedAtMs));
@@ -406,20 +457,103 @@ void updateCommandAudioFrames() {
       static_cast<unsigned>(gCommandAudioBuffer.queuedFrames()),
       static_cast<unsigned long>(gCommandAudioBuffer.droppedFrames()));
 }
-//  处理串口临时唤醒测试命令，不参与正常唤醒路径 / Process the temporary serial wake test command; it is not part of normal wake detection
-void updateVoiceDebugInput() {
-  while (Serial.available() > 0) {
-    const int input = Serial.read();
-    if (input == 'w') {
-      if (OmiPetVoice::voice.state() == OmiPetVoice::VoiceState::Idle) {
-        gCommandAudioBuffer.reset();
-        OmiPetAudio::multiNetCommandRecognizer.reset();
-        Serial.println("[VOICE] serial wake trigger (debug fallback; continuous recognition active)");
-        OmiPetVoice::voice.notifyWakeWordDetected();
-      }
-    }
+//  仅由帧外调试输入触发现有唤醒测试行为 / Trigger existing wake testing only from debug input outside protocol frames
+void triggerVoiceDebugWake() {
+  if (OmiPetVoice::voice.state() == OmiPetVoice::VoiceState::Idle) {
+    gCommandAudioBuffer.reset();
+    OmiPetAudio::multiNetCommandRecognizer.reset();
+    Serial.println("[VOICE] serial wake trigger (debug fallback; continuous recognition active)");
+    if (OmiPetVoice::voice.notifyWakeWordDetected()) beginWakeLight();
   }
 }
+
+//  实验关闭时保留原串口入口，开启时先隔离完整帧 / Preserve the original input path when disabled and isolate complete frames when enabled
+void updateVoiceDebugInput() {
+#if OMIPET_PROTOCOL_EXPERIMENT
+  bool localLightAllowed = !gWakeLightActive;
+#if OMIPET_DESKTOP_CONTROL
+  localLightAllowed = localLightAllowed && !gVoiceLightAppliedThisLoop;
+#endif
+  OmiPetProtocol::pollSerialExperiment(triggerVoiceDebugWake, localLightAllowed);
+#else
+  while (Serial.available() > 0) {
+    if (Serial.read() == 'w') triggerVoiceDebugWake();
+  }
+#endif
+}
+#if OMIPET_DESKTOP_CONTROL
+//  仅应用新修订的本地命令，监控和唤醒期间由协议拒绝手动设置 / Apply only a new local-command revision; the protocol rejects manual settings during monitoring or wake listening
+void updateDesktopLightCommand() {
+  static uint32_t appliedRevision = 0;
+  const OmiPetProtocol::LocalLightCommand command = OmiPetProtocol::usbLocalLightCommand();
+  if (command.revision == 0 || command.revision == appliedRevision) return;
+  appliedRevision = command.revision;
+  using namespace OmiPetLed;
+  using OmiPetProtocol::LocalLightEffect;
+  strip.setBrightness(command.brightness);
+  EffectMode mode = EffectMode::Solid;
+  switch (command.effect) {
+    case LocalLightEffect::Solid: mode = EffectMode::Solid; break;
+    case LocalLightEffect::Rainbow: mode = EffectMode::Rainbow; break;
+    case LocalLightEffect::Breathe: mode = EffectMode::Breathe; break;
+    case LocalLightEffect::Sweep: mode = EffectMode::Sweep; break;
+    case LocalLightEffect::CenterExpand: mode = EffectMode::CenterExpand; break;
+    case LocalLightEffect::Off: mode = EffectMode::Off; break;
+  }
+  effects.setConfiguration(mode, command.red, command.green, command.blue);
+  Serial.printf("[LED] owner=desktop revision=%lu effect=%u rgb=%u,%u,%u brightness=%u\n",
+                static_cast<unsigned long>(command.revision), static_cast<unsigned>(command.effect),
+                command.red, command.green, command.blue, command.brightness);
+}
+#endif
+#if OMIPET_MONITOR_LIGHTS
+//  仅在隔离构建中把有效协议状态映射到实体灯带 / Map valid protocol state to physical LEDs only in isolated builds
+void updateMonitorLights() {
+  using namespace OmiPetLed;
+  const OmiPetProtocol::SessionView view = OmiPetProtocol::usbExperimentView();
+  const bool voiceOverride = gVoiceLightOverride.observe(view);
+  if (gWakeLightActive) return;
+#if OMIPET_MONITOR_GREEN_OFF
+  const LightArbitrationPolicy policy{LightFallback::Green, LightFallback::Green};
+  const LightDecision decision = arbitrateLight(view, voiceOverride, policy, OmiPetProtocol::usbMonitorOutput());
+#else
+  const LightArbitrationPolicy policy{LightFallback::Local, LightFallback::Local};
+  const LightDecision decision = arbitrateLight(view, voiceOverride, policy);
+#endif
+  if (decision.owner == LightOwner::Off) {
+    if (gLightOwner != LightOwner::Off) {
+      strip.clear();
+      Serial.println("[LED] owner=off reason=monitor-disconnected");
+    }
+    gLightOwner = LightOwner::Off;
+    gMonitorLightStatus = MonitorLightStatus::Unknown;
+    return;
+  }
+  if (decision.owner != LightOwner::Monitor) {
+    if (gLightOwner != LightOwner::Local) {
+      effects.refresh();
+      Serial.printf("[LED] owner=local reason=%s\n", voiceOverride ? "voice" : "fallback");
+    }
+    gLightOwner = LightOwner::Local;
+    gMonitorLightStatus = MonitorLightStatus::Unknown;
+    return;
+  }
+  if (gLightOwner != LightOwner::Monitor || gMonitorLightStatus != decision.status) {
+    MonitorLightRgb color{};
+    if (!monitorLightRgb(decision.status, color)) return;
+    if (gLightOwner != LightOwner::Monitor) {
+      gMonitorEffects.begin();
+      gMonitorEffects.setCenterExpand(color.red, color.green, color.blue);
+    } else {
+      gMonitorEffects.setColor(color.red, color.green, color.blue);
+    }
+    Serial.printf("[LED] owner=monitor effect=center_expand status=%s brightness=%u\n", view.displayStatus,
+                  static_cast<unsigned>(strip.brightness()));
+  }
+  gLightOwner = LightOwner::Monitor;
+  gMonitorLightStatus = decision.status;
+}
+#endif
 void refreshNetworkAndTimeUi() {
   const bool wifiConnected = OmiPetNetwork::wifi.connected();
   OmiPetTime::ntp.update(wifiConnected);
@@ -442,12 +576,18 @@ void updateSystemHeartbeat() {
                 static_cast<unsigned long>(millis()),
                 OmiPetAudio::microphone.initialized() ? "ok" : "off",
                 OmiPetNetwork::wifi.connected() ? "connected" : "offline");
+#if OMIPET_PROTOCOL_USB
+  OmiPetProtocol::reportUsbExperiment();
+#endif
 }
 
 }  //  匿名命名空间 / Anonymous namespace
 
 //  初始化所有硬件驱动和业务模块 / Initialize all hardware drivers and application modules
 void setup() {
+#if OMIPET_PROTOCOL_USB
+  OmiPetProtocol::configureUsbExperiment();
+#endif
   Serial.begin(115200);
   delay(1500);
   Serial.println("[BOOT] setup entered");
@@ -520,20 +660,37 @@ void setup() {
 
 //  按固定顺序执行非阻塞更新：网络、灯效、采集、识别、传感器和 UI / Run non-blocking updates in order: network, effects, capture, recognition, sensors, and UI
 void loop() {
+#if OMIPET_DESKTOP_CONTROL
+  gVoiceLightAppliedThisLoop = false;
+#endif
   //  处理 WiFiManager 网页配网和连接状态 / Process WiFiManager provisioning and connection state
   OmiPetNetwork::wifi.update();
   refreshNetworkAndTimeUi();
   //  先推进灯效，避免语音识别处理占用主循环时延后动画刷新 / Advance effects first so speech processing delays animation refresh less
-  OmiPetLed::effects.update();
+#if OMIPET_MONITOR_LIGHTS
+  if (gWakeLightActive) gWakeEffects.update();
+  else if (gLightOwner == OmiPetLed::LightOwner::Monitor) gMonitorEffects.update();
+  else if (gLightOwner == OmiPetLed::LightOwner::Local) OmiPetLed::effects.update();
+#else
+  if (gWakeLightActive) gWakeEffects.update();
+  else OmiPetLed::effects.update();
+#endif
   updateSystemHeartbeat();
   updateMicrophoneDiagnostic();
   updateCommandAudioFrames();
   updateVoiceDebugInput();
+#if OMIPET_DESKTOP_CONTROL
+  updateDesktopLightCommand();
+#endif
+#if OMIPET_MONITOR_LIGHTS
+  updateMonitorLights();
+#endif
   const bool wasListeningForCommand =
       OmiPetVoice::voice.listeningForCommand();
   OmiPetVoice::voice.update(gSpeechActive);
   if (wasListeningForCommand &&
       !OmiPetVoice::voice.listeningForCommand()) {
+    finishWakeLight();
     OmiPetAudio::multiNetCommandRecognizer.reset();
     gCommandAudioBuffer.reset();
   }

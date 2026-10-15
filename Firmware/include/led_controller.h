@@ -72,6 +72,8 @@ class EffectController {
   void update();
   //  立即按当前模式完整重绘一帧 / Immediately redraw one complete frame for the current mode
   void refresh();
+  //  一次更新颜色和模式后只绘制一帧，避免上位机命令产生中间颜色 / Update color and mode together and draw once to avoid intermediate desktop-command colors
+  void setConfiguration(EffectMode mode, uint8_t red, uint8_t green, uint8_t blue);
   //  设置颜色并切换到常亮 / Set color and switch to solid mode
   void setSolid(uint8_t red, uint8_t green, uint8_t blue);
   //  用当前颜色切换到常亮 / Switch to solid mode using current color
@@ -84,8 +86,12 @@ class EffectController {
   void setBreathe();
   //  设置左右往返渐变扫描 / Set left-to-right ping-pong sweep
   void setSweep();
+  //  以指定颜色开始跑马灯，避免先显示默认绿色帧 / Start the sweep in the requested color without a transient default-green frame
+  void setSweep(uint8_t red, uint8_t green, uint8_t blue);
   //  设置中心向外扩散再收回 / Set center-outward expansion and return
   void setCenterExpand();
+  //  以指定颜色开始中心扩散，避免先显示默认红色帧 / Start center expansion in the requested color without a transient default-red frame
+  void setCenterExpand(uint8_t red, uint8_t green, uint8_t blue);
   //  关闭灯带输出 / Turn off strip output
   void setOff();
   //  获取当前动画模式 / Get current animation mode

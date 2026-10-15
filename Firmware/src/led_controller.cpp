@@ -233,6 +233,16 @@ void EffectController::refresh() {
   render(millis(), true);
 }
 
+//  原子更新动效配置，保留现有动画实现和时序 / Update effect configuration together while preserving existing renderers and timing
+void EffectController::setConfiguration(EffectMode mode, uint8_t red,
+                                        uint8_t green, uint8_t blue) {
+  red_ = red;
+  green_ = green;
+  blue_ = blue;
+  selectMode(mode);
+  render(millis(), true);
+}
+
 //  切换到指定 RGB 颜色的常亮模式 / Switch to solid mode with the requested RGB color
 void EffectController::setSolid(uint8_t red, uint8_t green, uint8_t blue) {
   //  保存基础颜色；呼吸、扫描和扩散都以这组 RGB 为颜色来源 / Store the base color used by breathing, sweep, and expansion effects
@@ -280,9 +290,14 @@ void EffectController::setBreathe() {
 //  切换到带固定底光的纯绿色左右追逐动效 / Switch to the pure-green left-right sweep with fixed base light
 void EffectController::setSweep() {
   //  进入跑马灯时使用纯绿色；之后的颜色命令仍可保留跑马灯并切换颜色 / Start sweep in pure green; later color commands keep the effect and change its color
-  red_ = kSweepRed;
-  green_ = kSweepGreen;
-  blue_ = kSweepBlue;
+  setSweep(kSweepRed, kSweepGreen, kSweepBlue);
+}
+
+//  以指定颜色立即开始左右往返跑马灯 / Start the left-right sweep immediately in the requested color
+void EffectController::setSweep(uint8_t red, uint8_t green, uint8_t blue) {
+  red_ = red;
+  green_ = green;
+  blue_ = blue;
   selectMode(EffectMode::Sweep);
   render(millis(), true);
 }
@@ -290,9 +305,14 @@ void EffectController::setSweep() {
 //  切换到带固定底光的纯红色中心向外扩散动效 / Switch to the pure-red center-out expansion with fixed base light
 void EffectController::setCenterExpand() {
   //  进入扩散灯时使用纯红色；之后的颜色命令仍可保留扩散动效并切换颜色 / Start expansion in pure red; later color commands keep the effect and change its color
-  red_ = kCenterExpandRed;
-  green_ = kCenterExpandGreen;
-  blue_ = kCenterExpandBlue;
+  setCenterExpand(kCenterExpandRed, kCenterExpandGreen, kCenterExpandBlue);
+}
+
+//  以指定颜色立即开始中心扩散 / Start center expansion immediately with the requested color
+void EffectController::setCenterExpand(uint8_t red, uint8_t green, uint8_t blue) {
+  red_ = red;
+  green_ = green;
+  blue_ = blue;
   selectMode(EffectMode::CenterExpand);
   render(millis(), true);
 }
@@ -317,7 +337,7 @@ void EffectController::selectMode(EffectMode mode) {
 
 //  根据当前模式选择具体渲染函数 / Dispatch rendering to the function for the current mode
 void EffectController::render(uint32_t nowMs, bool force) {
-  //  非强制渲染遵守 16 ms 帧间隔；无论 loop() 多快，都不会过度发送数据 / Non-forced rendering obeys the 16 ms interval and avoids excessive bus traffic regardless of loop speed
+  //  非强制渲染遵守 12 ms 帧间隔；无论 loop() 多快，都不会过度发送数据 / Non-forced rendering obeys the 12 ms interval and avoids excessive bus traffic regardless of loop speed
   if (!force && nowMs - lastFrameAtMs_ < kFrameIntervalMs) {
     return;
   }

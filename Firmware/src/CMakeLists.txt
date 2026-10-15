@@ -4,6 +4,9 @@ set(OMIPET_SOURCES
     "aht20_sensor.cpp"
     "battery_monitor.cpp"
     "buzzer.cpp"
+    "device_protocol_envelope.cpp"
+    "device_protocol_experiment.cpp"
+    "device_protocol_session.cpp"
     "ics43434_mic.cpp"
     "led_controller.cpp"
     "multinet_command_recognizer.cpp"
@@ -18,5 +21,5 @@ set(OMIPET_SOURCES
 idf_component_register(
     SRCS ${OMIPET_SOURCES}
     INCLUDE_DIRS "../include" "../lib/NV3007_Display"
-    REQUIRES esp-sr
+    REQUIRES esp-sr json
 )
