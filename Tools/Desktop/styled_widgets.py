@@ -157,6 +157,31 @@ class ModeRow(ctk.CTkFrame):
         self.switch_var.set(int(self.selected))
 
 
+class BrightnessSlider(ctk.CTkSlider):
+    def __init__(self, parent, *, variable, command):
+        self.command = command
+        super().__init__(parent, from_=0, to=255, number_of_steps=255, variable=variable,
+                         command=command, height=24, corner_radius=1000, button_corner_radius=1000,
+                         button_length=0, border_width=8, fg_color="#E4EBF5", progress_color=BLUE,
+                         button_color=BLUE, button_hover_color="#2469E4", bg_color=WHITE)
+        for key, value in (("<Left>", -1), ("<Down>", -1), ("<Right>", 1), ("<Up>", 1)):
+            self.bind(key, lambda event, delta=value: self.step(delta))
+        tk.Frame.configure(self, takefocus=1)
+
+    def step(self, delta):
+        if str(self.cget("state")) != "disabled":
+            self.set(min(255, max(0, self.get() + delta)))
+            self.command(self.get())
+        return "break"
+
+    def configure(self, require_redraw=False, **kwargs):
+        if "state" in kwargs:
+            disabled = kwargs["state"] == "disabled"
+            kwargs.update(progress_color="#C9D3E2" if disabled else BLUE,
+                          button_color="#B1BED1" if disabled else BLUE)
+        super().configure(require_redraw=require_redraw, **kwargs)
+
+
 class PageViewport(tk.Frame):
     def __init__(self, parent):
         super().__init__(parent, bg=BG)

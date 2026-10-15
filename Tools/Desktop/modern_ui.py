@@ -3,7 +3,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from app import EFFECTS, LegacyDesktopApp
-from styled_widgets import Button, Card, ModeRow, Navigation, PageViewport
+from styled_widgets import BrightnessSlider, Button, Card, ModeRow, Navigation, PageViewport
 
 BG = "#F6F8FC"
 WHITE = "#FFFFFF"
@@ -81,8 +81,6 @@ class ModernDesktopApp(LegacyDesktopApp):
         style.configure("TEntry", padding=9, fieldbackground=WHITE, foreground=INK,
                         bordercolor="#DFE6F0", lightcolor=WHITE, darkcolor=WHITE)
 
-        style.configure("Horizontal.TScale", background=WHITE, troughcolor="#E6EEFB", borderwidth=0)
-
     def _build(self):
         self.navigation = {}
         self.pages = {}
@@ -122,7 +120,7 @@ class ModernDesktopApp(LegacyDesktopApp):
         self.navigation["settings"] = settings_nav
         tk.Frame(bottom, bg="#E0E6F0", height=1).pack(fill="x", padx=10, pady=16)
         label(bottom, "OmiPet Desktop", size=9, color=MUTED).pack(anchor="w", padx=12)
-        label(bottom, "0.4  ·  USB 控制台", size=8, color="#A2ACBB").pack(anchor="w", padx=12, pady=(3, 0))
+        label(bottom, "0.5  ·  USB 控制台", size=8, color="#A2ACBB").pack(anchor="w", padx=12, pady=(3, 0))
 
         main = tk.Frame(self.window, bg=BG)
         main.pack(side="left", fill="both", expand=True)
@@ -265,7 +263,7 @@ class ModernDesktopApp(LegacyDesktopApp):
         brightness.pack(fill="x", pady=(0, 10))
         label(brightness, "灯光亮度", size=10, bold=True).pack(side="left")
         label(brightness, variable=self.brightness_text, size=9, color=BLUE).pack(side="right")
-        self.brightness_scale = ttk.Scale(body, from_=0, to=255, variable=self.brightness, command=self.brightness_changed)
+        self.brightness_scale = BrightnessSlider(body, variable=self.brightness, command=self.brightness_changed)
         self.brightness_scale.pack(fill="x", pady=(0, 18))
         label(body, "灯效", size=10, bold=True).pack(anchor="w", pady=(0, 10))
         effect_grid = tk.Frame(body, bg=WHITE)

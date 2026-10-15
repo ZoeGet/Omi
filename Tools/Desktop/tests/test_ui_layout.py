@@ -128,6 +128,38 @@ class LayoutTests(unittest.TestCase):
         finally:
             self.dispose(window)
 
+    def test_rounded_brightness_slider_preserves_values_and_monitor_lock(self):
+        window = tk.Tk()
+        try:
+            app = ModernDesktopApp(window, demo=True)
+            window.geometry("1160x820+10000+10000")
+            window.update()
+            app.connected = True
+            app.snapshot = dict(operations=["light"], monitorLights=True, monitorGreenOff=True,
+                                monitorRequested=False, state=dict(mode="local", monitorOutput="local"))
+            app._controls()
+            self.assertIsInstance(app.brightness_scale, ctk.CTkSlider)
+            text_labels = [child for child in app.color_button.winfo_children() if isinstance(child, tk.Label)]
+            self.assertTrue(any(child.cget("text") == "#FFFFFF" for child in text_labels))
+            app.set_color("#123456")
+            self.assertTrue(any(child.cget("text") == "#123456" for child in text_labels))
+            sent = []
+            app.command = lambda *values: sent.append(values)
+            for value, percentage in ((0, "0%"), (16, "6%"), (128, "50%"), (255, "100%")):
+                app.brightness_scale.set(value)
+                app.brightness_changed(value)
+                self.assertEqual(app.brightness_text.get(), percentage)
+                self.assertFalse(sent)
+                app.apply_light()
+                self.assertEqual(sent.pop()[1]["brightness"], value)
+            app.snapshot.update(monitorRequested=True, state=dict(mode="monitor", monitorOutput="connected"))
+            app._controls()
+            before = app.brightness.get()
+            self.assertEqual(str(app.brightness_scale.cget("state")), "disabled")
+            app.brightness_scale.step(-1)
+            self.assertEqual(app.brightness.get(), before)
+        finally:
+            self.dispose(window)
 
 
     def test_pages_fit_minimum_window_and_monitor_locks_all_light_actions(self):
