@@ -56,6 +56,10 @@ class Swatch(tk.Canvas):
             self.command()
 
     def paint(self, event=None):
+        signature = (self.selected, str(self.cget("state")), self.color)
+        if getattr(self, "_appearance_signature", None) == signature:
+            return
+        self._appearance_signature = signature
         self.delete("all")
         disabled = str(self.cget("state")) == "disabled"
         border = BLUE if self.selected and not disabled else WHITE
@@ -369,19 +373,22 @@ class ModernDesktopApp(LegacyDesktopApp):
         monitoring = self.snapshot.get("monitorRequested", False)
         supported = "light" in self.snapshot.get("operations", ())
         enabled = active and not monitoring and supported
-        for row in self.mode_rows.values():
-            row.selected = False
-            row.configure(state="disabled")
-        self.local_button.configure(state="normal" if active else "disabled")
         monitor_ready = self.snapshot.get("monitorLights") and self.snapshot.get("monitorGreenOff")
+        confirmed_state = self.snapshot.get("state") or {}
+        signature = (self.connected, self.busy, self.closing, monitoring, supported, bool(monitor_ready),
+                     confirmed_state.get("mode"), confirmed_state.get("monitorOutput"))
+        if getattr(self, "_controls_signature", None) == signature:
+            self._status()
+            return
+        self._controls_signature = signature
         self.mode_hint.set("请更新设备固件，以启用新的监控灯光规则。" if self.connected and not monitor_ready
                            else "监控中锁定手动调灯，语音可接管。")
-        self.monitor_button.configure(state="normal" if active and monitor_ready else "disabled")
-        confirmed_state = self.snapshot.get("state") or {}
-        self.local_button.selected = not monitoring and confirmed_state.get("mode") == "local"
-        self.monitor_button.selected = monitoring and confirmed_state.get("monitorOutput") == "connected"
-        self.local_button.paint()
-        self.monitor_button.paint()
+        selections = dict(local=not monitoring and confirmed_state.get("mode") == "local",
+                          monitor=monitoring and confirmed_state.get("monitorOutput") == "connected")
+        for key, row in self.mode_rows.items():
+            row.selected = selections.get(key, False)
+            allowed = active and (key == "local" or (key == "monitor" and monitor_ready))
+            row.configure(state="normal" if allowed else "disabled")
         for widget in (self.color_button, self.apply_button, self.brightness_scale, *self.swatch_buttons, *self.effect_tiles.values()):
             widget.configure(state="normal" if enabled else "disabled")
         self.connect_button.configure(state="normal" if not self.connected and not self.busy and not self.closing else "disabled")
@@ -419,13 +426,18 @@ class ModernDesktopApp(LegacyDesktopApp):
                                   "idle": ("任务已完成", "绿色扩散灯 · 当前无待处理任务", GREEN),
                                   "unknown": ("待机 / 来源未知", "绿色扩散灯 · 暂时没有可用的任务状态", GREEN),
                                   "offline": ("来源离线", "绿色扩散灯 · 设备连接仍在保持", GREEN)}.get(status, ("待机", "绿色扩散灯", GREEN))
+        health = self.snapshot.get("health", {})
+        diagnostics = self.snapshot.get("diagnostics", {})
+        signature = (title, note, color, bool(health.get("microphoneOk")), monitoring,
+                     diagnostics.get('replyTimeouts', 0) + diagnostics.get('decodeIssues', 0))
+        if getattr(self, "_status_signature", None) == signature:
+            return
+        self._status_signature = signature
         self.summary_title.set(title)
         self.summary_note.set(note)
         self.status_dot.delete("all")
         self.status_dot.create_oval(0, 0, 49, 49, fill="#F3F6FB", outline="")
         self.status_dot.create_oval(15, 15, 34, 34, fill=color, outline="")
-        health = self.snapshot.get("health", {})
-        diagnostics = self.snapshot.get("diagnostics", {})
         self.metric_microphone.set("正常" if health.get("microphoneOk") else "等待数据")
         self.metric_errors.set(f"{diagnostics.get('replyTimeouts', 0) + diagnostics.get('decodeIssues', 0)} 次")
         self.metric_owner.set("Codex 监控" if monitoring else "本地控制")
@@ -435,15 +447,21 @@ class ModernDesktopApp(LegacyDesktopApp):
         self._preview()
 
     def brightness_changed(self, value):
-        self.brightness_text.set(f"{round(float(value) / 255 * 100)}%")
-        if hasattr(self, "preview"):
-            self._preview()
+        text = f"{round(float(value) / 255 * 100)}%"
+        if self.brightness_text.get() != text:
+            self.brightness_text.set(text)
+        if hasattr(self, "preview_note"):
+            self._update_preview_note()
 
+    def _update_preview_note(self):
+        text = f"{self.effect.get()} · {self.color_text.get()} · 亮度 {round(self.brightness.get() / 255 * 100)}%"
+        if self.preview_note.get() != text:
+            self.preview_note.set(text)
 
     def _preview(self):
         if not hasattr(self, "preview"):
             return
-        self.preview_note.set(f"{self.effect.get()} · {self.color_text.get()} · 亮度 {round(self.brightness.get() / 255 * 100)}%")
+        self._update_preview_note()
         for swatch in self.swatch_buttons:
             swatch.selected = swatch.color == self.color_text.get()
             swatch.paint()
@@ -451,11 +469,15 @@ class ModernDesktopApp(LegacyDesktopApp):
             tile.variant = "selected" if self.effect.get() == name else "outline"
             tile.paint()
         for canvas in (self.quick_preview, self.preview):
-            canvas.delete("all")
             width = canvas.winfo_width()
             if width < 2:
                 continue
             height = canvas.winfo_height()
+            signature = (width, height, self.effect.get(), self.rgb)
+            if getattr(canvas, "_preview_signature", None) == signature:
+                continue
+            canvas._preview_signature = signature
+            canvas.delete("all")
             center = height / 2
             rounded(canvas, 8, center - 23, width - 8, center + 23, 18, fill="#F4F7FD", outline="")
             spacing = (width - 52) / 12

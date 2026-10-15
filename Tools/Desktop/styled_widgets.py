@@ -62,11 +62,19 @@ class Button(ctk.CTkButton):
             self.command()
 
     def configure(self, require_redraw=False, **kwargs):
+        if hasattr(self, "_text_label"):
+            kwargs = {key: value for key, value in kwargs.items() if self.cget(key) != value}
+            if not kwargs and not require_redraw:
+                return
         super().configure(require_redraw=require_redraw, **kwargs)
         if hasattr(self, "_text_label"):
             self.paint()
 
     def paint(self, event=None):
+        signature = (self.variant, str(self.cget("state")), self.focus_get() is self)
+        if getattr(self, "_appearance_signature", None) == signature:
+            return
+        self._appearance_signature = signature
         if str(self.cget("state")) == "disabled":
             fill, color, border, hover = "#F1F4F8", "#B0BAC8", "#EBEFF4", "#F1F4F8"
         elif self.variant == "accent":
@@ -91,6 +99,9 @@ class Navigation(ctk.CTkButton):
         tk.Frame.configure(self, takefocus=1)
 
     def paint(self, event=None):
+        if getattr(self, "_painted_selection", None) == self.selected:
+            return
+        self._painted_selection = self.selected
         self.configure(fg_color="#E1EBFD" if self.selected else SIDE,
                        text_color="#2567D9" if self.selected else "#647188")
 
@@ -147,6 +158,10 @@ class ModeRow(ctk.CTkFrame):
             self.command()
 
     def paint(self, event=None):
+        signature = (self.selected, self._state, self.focus_get() is self)
+        if getattr(self, "_appearance_signature", None) == signature:
+            return
+        self._appearance_signature = signature
         fill = PALE if self.selected else "#F6F8FB"
         border = BLUE if self.focus_get() is self and self._state != "disabled" else fill
         ctk.CTkFrame.configure(self, fg_color=fill, border_width=1, border_color=border)
@@ -179,7 +194,9 @@ class BrightnessSlider(ctk.CTkSlider):
             disabled = kwargs["state"] == "disabled"
             kwargs.update(progress_color="#C9D3E2" if disabled else BLUE,
                           button_color="#B1BED1" if disabled else BLUE)
-        super().configure(require_redraw=require_redraw, **kwargs)
+        kwargs = {key: value for key, value in kwargs.items() if self.cget(key) != value}
+        if kwargs or require_redraw:
+            super().configure(require_redraw=require_redraw, **kwargs)
 
 
 class PageViewport(tk.Frame):

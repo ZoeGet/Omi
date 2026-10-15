@@ -3,6 +3,7 @@ import sys
 import tkinter as tk
 from tkinter import font as tkfont
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from modern_ui import Button, Card, ModernDesktopApp, PageViewport
@@ -161,6 +162,37 @@ class LayoutTests(unittest.TestCase):
         finally:
             self.dispose(window)
 
+    def test_unchanged_status_and_brightness_do_not_repaint_unrelated_buttons(self):
+        window = tk.Tk()
+        try:
+            app = ModernDesktopApp(window, demo=True)
+            window.geometry("1160x820+10000+10000")
+            window.update()
+            app.connected = True
+            app.snapshot = dict(operations=["light"], monitorLights=True, monitorGreenOff=True,
+                                monitorRequested=False, state=dict(mode="local", monitorOutput="local"))
+            app._controls()
+            window.update()
+            with patch.object(ctk.CTkButton, "_draw") as draw:
+                for value in (16, 64, 128, 255):
+                    app._controls()
+                    app.brightness_scale.set(value)
+                    app.brightness_changed(value)
+                draw.assert_not_called()
+            app.snapshot.update(monitorRequested=True, state=dict(mode="monitor", monitorOutput="connected",
+                                                                  displayStatus="working"))
+            app._controls()
+            self.assertTrue(app.monitor_button.selected)
+            self.assertEqual(str(app.apply_button.cget("state")), "disabled")
+            app.snapshot["state"]["displayStatus"] = "waitingApproval"
+            app._controls()
+            self.assertEqual(app.summary_title.get(), "等待审批")
+            app.snapshot["state"] = None
+            app._controls()
+            self.assertEqual(app.summary_title.get(), "连接中断")
+            self.assertFalse(app.monitor_button.selected)
+        finally:
+            self.dispose(window)
 
     def test_pages_fit_minimum_window_and_monitor_locks_all_light_actions(self):
         try:

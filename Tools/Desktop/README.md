@@ -77,6 +77,8 @@ python -m unittest discover -s Tools/DeviceBridge/tests
 
 最新设备安装收据 `firmware-green-off-install-20261015.json`，回退目录 `usb-rollback-before-green-off-20261015/`；均在 `tmp/codex-monitor-probe/`。上次默认 exe 和完整 Windows zip 已打包，演示冒烟检查通过。上次 computer-use 捕获重试后仍报 `FrameArrived timed out: timed out waiting on channel`；随后用户按 Escape 停止界面操作。用户认可预览方向，但这不构成截图审查通过。以上为此前设备验收记录，提交情况以 Git 历史为准。
 
-本批只发布上位机源码、依赖、许可、测试及文档；干净暂存树导出验证覆盖 16 项上位机测试。本轮未改通信周期、超时、重试或固件，未刷机；安装包、原始报告、收据和本地配置留本地。界面目视验收待用户确认；无线和完整设备读回未接入。
+此前源码按五个功能批次及 0.3 界面修正共六批推送至 `0744e03`。0.4/0.5 后续改动按提交规则、依赖与许可、圆角控件与滚动条、亮度滑条、重绘优化五批发布，具体提交号以 Git 历史为准；每批相关检查及干净源码导出测试通过，最终 17 项上位机测试通过，含亮度范围/百分比/发送值、禁用保护、色值文本、重复状态不重绘无关按钮以及状态改变后仍正确锁定。本轮未改通信周期、超时、重试或固件，未刷机。安装包、原始报告、收据和本地配置按 `CONTRIBUTING.md` 留本地。下一步用户核验滑条与操作流畅度；无线和完整设备读回未接入。
 
 库控件封装在 `styled_widgets.py`，页面继续由 `modern_ui.py` 编排。本地证据：`tmp/codex-monitor-probe/desktop-styled-build-20261015.log`、`desktop-styled-package-20261015.json`；15 项测试、打包 exe 演示启动、主题/圆角字体/许可资源和 zip 完整性检查通过。无本轮截图或人工验收记录，旧程序及串口连接未操作。
+
+0.5 修正 UI 重绘：控件可用性/模式相同则跳过控件更新；按钮样式、状态区和预览只在可见内容变化时重绘，亮度回调仅更新百分比/摘要。串口仍在原工作线程处理，1 秒通信周期与 100 ms UI 队列轮询未改。本机离线同步回调测量（不含窗口事件循环、设备或屏幕延迟）：20 次未变化状态刷新中位数约 251.17→0.0015 ms，按钮绘制 900→0；40 次亮度回调约 27.12→3.58 ms，按钮绘制 240→0。后者包含变量驱动的新滑条自身绘制，不能当作整体帧率或实机响应保证。原始数据 `tmp/codex-monitor-probe/desktop-ui-before-20261015.json`、`desktop-ui-after-20261015.json`；0.5 构建/包记录为 `desktop-responsive-build-20261015.log`、`desktop-responsive-package-20261015.json`。下一步人工确认流畅度。
