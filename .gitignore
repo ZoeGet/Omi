@@ -72,6 +72,11 @@ build/
 dist/
 release/
 
+#  上位机安装包和打包器生成文件，含误放在输出目录外的副本 / Desktop packages and generated bundler files, including misplaced copies
+/Tools/Desktop/**/*.exe
+/Tools/Desktop/**/*.zip
+/Tools/Desktop/**/*.spec
+
 # Local agent handoff instructions
 AGENTS.md
 

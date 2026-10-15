@@ -6,6 +6,7 @@
 - 使用合成会话、虚构路径或公开测试向量的测试；本地生成测试结果不随源码提交。
 - 默认关闭、边界明确、有回退说明的实验模块；文档必须区分模拟、编译、烧录、设备日志和人工验收。
 - `pairing_credentials.py` 与对应测试是处理凭证的源码，可以提交；它们生成的真实密钥、配对记录和 TLS 身份不可提交。
+- 引入第三方组件时提交依赖版本、来源与许可声明；随安装包分发的字体许可文本可以提交，安装环境和下载缓存只留本地。
 
 ## 只留本地
 
@@ -13,6 +14,7 @@
 - 原始 Hook 事件、快照、宿主绑定、真实会话/工具调用标识、对话内容、本机进程身份与私人路径。
 - 实机收据、串口原始日志、备份/回退镜像、临时实验配置及截图；公开文档仅写必要的脱敏结果，实机序列号留本地。
 - `tmp/`、`.pio/`、`build/`、`dist/`、缓存、虚拟环境、固件镜像、exe/zip 安装包和本机 SDK 配置。
+- 上位机目录内的 `*.exe`、`*.zip`、`*.spec` 另有明确忽略规则，防止把输出目录外的副本加入 Git；维护的打包入口 `build_windows.ps1` 可以提交。性能原始报告与打包收据统一放在已忽略的 `tmp/`。
 - 本地 `AGENTS.md`、厂家示例及已忽略资料；未经用户明确要求，不使用 `git add -f` 强行加入。
 - 上游子模块内部改动默认不提交；子模块引用更新须独立说明来源和用途。
 
@@ -22,8 +24,8 @@
 2. 按功能列出明确文件路径并暂存；同一文件跨功能时审阅分块，保证该批依赖已存在。原始日志、凭据和二进制不得靠改扩展名绕过规则。
 3. 运行 `python Tools/Repository/check_publish.py`，再检查 `git diff --cached --check`、`git diff --cached --stat` 和完整暂存内容。检查器只覆盖常见路径与密钥模式，不能代替人工审阅。
 4. 执行与该批相关的测试/构建；实机结果记录边界，不能用工作树中尚未提交的依赖掩盖缺文件。
-5. 使用 Conventional Commits：`type(scope): description`。类型用 `feat`、`fix`、`test`、`docs`、`refactor`、`build` 或 `chore`，scope 标明模块，描述使用简洁动词。例如 `fix(desktop): prevent light-summary text clipping`。
+5. 使用 Conventional Commits：`type(scope): description`。类型用 `feat`、`fix`、`perf`、`test`、`docs`、`refactor`、`build` 或 `chore`，scope 标明模块，描述使用简洁动词。例如 `fix(desktop): prevent light-summary text clipping`。
 6. 用户授权后，一批一个 commit，随后单独 push；核对远端分支提交号一致，再处理下一批。推送失败立即查明原因，不堆积后续提交、不强推、不改写已发布历史。
 7. 发布安装包属于另一个交付步骤；没有明确授权时不上传 Release、原始日志或本地状态。
 
-用户当前已授权本轮分批 commit/push；后续任务仍遵守本地协作规则。界面新需求在现有改动发布之后独立处理。
+提交和推送授权以用户当前明确请求为准；本轮授权不自动延伸到后续任务。
