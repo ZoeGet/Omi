@@ -53,6 +53,20 @@ env/
 *.p12
 *.pfx
 
+#  已审计的凭证处理源码与测试，不包含生成凭证 / Audited credential-handling source and tests, never generated credentials
+!Firmware/include/pairing_credential_record.h
+!Tools/DeviceBridge/pairing_credentials.py
+!Tools/DeviceBridge/tests/test_pairing_credentials.py
+
+#  本地监控状态、宿主身份、登录配置和剪贴板截图 / Local monitor state, host identities, authentication and clipboard captures
+**/host-bindings*.json
+**/host-binding-config.json
+**/snapshot.json
+**/events.jsonl
+**/auth.json
+**/hooks.json
+codex-clipboard-*.png
+
 # OS/user-specific generated exports
 build/
 dist/
