@@ -2,11 +2,13 @@
 
 用户已确认 Windows 桌面程序，主模式为“本地灯光 / Codex 监控”。新版采用浅色侧栏、卡片概览、圆形颜色预设、六个灯效选项及亮度百分比；用户认可预览方向。控制模式为纵向开关行，二者互斥，设备确认后显示选中；新增模式可扩展 `MODES` 定义，控制器和能力检查仍须同步实现。**监控模式禁止上位机手动调灯**，先切回本地再应用设置，语音继续优先。
 
-灯光摘要使用 10 磅字体和上下留白，宽度不足时换行。卡片按内容申请高度，内容区支持滚动，避免较大系统字体下裁切；概览灯带示意随尺寸变化重新绘制。0.3 源码测试覆盖 100%/125%/150% 对应的 Tk 字体缩放、文字/开关边界、滚动到底和互斥模式选择；这不替代用户实际显示器上的目视验收。提交及隐私排除规则见根目录 `CONTRIBUTING.md`。
+0.4 使用 [CustomTkinter 5.2.2](https://github.com/TomSchimansky/CustomTkinter) 的圆角卡片、按钮、开关和细滚动条。依赖和字体声明见 `THIRD_PARTY_NOTICES.md`；打包保留主题、字体与许可。现有 Tk 布局和业务控制器继续使用，库自动 DPI 缩放关闭，字体按现有 Tk 缩放换算。亮度滑条及重绘优化在后续独立批次发布。
+
+灯光摘要保持 10 磅字体和留白，宽度不足时换行；卡片按内容申请高度。滚动条仅在内容溢出时出现，无箭头、无凹槽，隐藏时归还占位并回到顶部；缩放窗口或换页后重新判断。默认 1160×820、100% 字体缩放下五页均能容纳且隐藏滚动条；较大字体或小窗口允许滚动。测试覆盖 100%/125%/150% 对应的 Tk 字体缩放、摘要/开关边界、滚动到底、溢出切换及设备确认后的互斥模式选择。几何与组件测试不替代实际显示器目视验收。提交及隐私规则见根目录 `CONTRIBUTING.md`。
 
 ## 启动
 
-0.3 修正版位于 `Tools/Desktop/dist/OmiPet-0-3/OmiPet-0-3.exe`；整个 `OmiPet-0-3` 目录一起保留，直接双击 exe，无需另装 Python。它与正在运行的旧版分开打包，切换前请自行在旧窗口断开设备，避免占用同一串口。默认打包命令仍输出 `dist/OmiPet/OmiPet.exe`；独立版本使用 `build_windows.ps1 -Name OmiPet-0-3`。
+0.4 位于 `Tools/Desktop/dist/OmiPet-0-4/OmiPet-0-4.exe`；整个 `OmiPet-0-4` 目录一起保留，双击 exe，无需另装 Python。与旧版分开打包，切换前请在旧窗口断开设备，避免占用同一串口。默认打包命令仍输出 `dist/OmiPet/OmiPet.exe`；独立版本使用 `build_windows.ps1 -Name OmiPet-0-4`。
 
 已有 Python 3 与 Tkinter 时，安装 `requirements.txt` 后双击 `Launch OmiPet.cmd`，或运行：
 
@@ -75,4 +77,6 @@ python -m unittest discover -s Tools/DeviceBridge/tests
 
 最新设备安装收据 `firmware-green-off-install-20261015.json`，回退目录 `usb-rollback-before-green-off-20261015/`；均在 `tmp/codex-monitor-probe/`。上次默认 exe 和完整 Windows zip 已打包，演示冒烟检查通过。上次 computer-use 捕获重试后仍报 `FrameArrived timed out: timed out waiting on channel`；随后用户按 Escape 停止界面操作。用户认可预览方向，但这不构成截图审查通过。以上为此前设备验收记录，提交情况以 Git 历史为准。
 
-本轮先将现有源码按规则、采集、配对基础、USB 桥接、上位机五个功能批次分别提交和推送，再独立修正 0.3 界面。`dist/OmiPet-0-3/` 与 `OmiPet-Windows-0.3.zip` 留本地，不上传 Git 或 Release。可从暂存树导出干净源码验证，避免本机忽略文件掩盖依赖缺失。下一步仍是用户核验摘要字号、纵向开关及新版断联灯效；无线和完整设备读回未接入。
+本批只发布上位机源码、依赖、许可、测试及文档；干净暂存树导出验证覆盖 15 项上位机测试。本轮未改通信周期、超时、重试或固件，未刷机；安装包、原始报告、收据和本地配置留本地。界面目视验收待用户确认；无线和完整设备读回未接入。
+
+库控件封装在 `styled_widgets.py`，页面继续由 `modern_ui.py` 编排。本地证据：`tmp/codex-monitor-probe/desktop-styled-build-20261015.log`、`desktop-styled-package-20261015.json`；15 项测试、打包 exe 演示启动、主题/圆角字体/许可资源和 zip 完整性检查通过。无本轮截图或人工验收记录，旧程序及串口连接未操作。

@@ -1,9 +1,9 @@
 import colorsys
 import tkinter as tk
-from tkinter import font as tkfont
 from tkinter import ttk
 
 from app import EFFECTS, LegacyDesktopApp
+from styled_widgets import Button, Card, ModeRow, Navigation, PageViewport
 
 BG = "#F6F8FC"
 WHITE = "#FFFFFF"
@@ -33,174 +33,27 @@ def label(parent, text=None, *, variable=None, size=10, color=INK, bold=False, *
     return widget
 
 
-class Card(tk.Canvas):
-    def __init__(self, parent, *, height=200, padding=20):
-        super().__init__(parent, bg=BG, highlightthickness=0, bd=0, height=height)
-        self.padding = padding
-        self.body = tk.Frame(self, bg=WHITE)
-        self.slot = self.create_window(padding, padding, window=self.body, anchor="nw")
-        self.bind("<Configure>", self.layout)
-        self.minimum_height = height
-        self.body.bind("<Configure>", self.fit_content)
-
-    def fit_content(self, event=None):
-        needed = max(self.minimum_height, self.body.winfo_reqheight() + 2 * self.padding)
-        if int(self.cget("height")) != needed:
-            self.configure(height=needed)
-
-    def layout(self, event=None):
-        width, height = self.winfo_width(), self.winfo_height()
-        self.delete("surface")
-        rounded(self, 1, 1, width - 1, height - 1, 16, fill=WHITE, outline=LINE, tags="surface")
-        self.tag_lower("surface")
-        self.itemconfigure(self.slot, width=max(1, width - 2 * self.padding), height=max(1, height - 2 * self.padding))
-
-
-class Button(tk.Canvas):
-    def __init__(self, parent, text, command, *, width=130, height=40, variant="outline", textvariable=None):
-        super().__init__(parent, width=width, height=height, bg=parent.cget("bg"),
-                         bd=0, highlightthickness=0, takefocus=True, cursor="hand2")
-        self.caption, self.command, self.variant = text, command, variant
-        self.hover = False
-        self.variable = textvariable
-        if textvariable is not None:
-            textvariable.trace_add("write", lambda *_: self.paint())
-        self.bind("<Configure>", self.paint)
-        self.bind("<Enter>", lambda _: self.hovered(True))
-        self.bind("<Leave>", lambda _: self.hovered(False))
+class Swatch(tk.Canvas):
+    def __init__(self, parent, color, command):
+        self.color = color
+        self.selected = False
+        self.command = command
+        super().__init__(parent, width=34, height=34, bg=parent.cget("bg"),
+                         highlightthickness=0, bd=0, takefocus=True, cursor="hand2")
         self.bind("<Button-1>", self.invoke)
         self.bind("<Return>", self.invoke)
         self.bind("<space>", self.invoke)
-        self.bind("<FocusIn>", self.paint)
-        self.bind("<FocusOut>", self.paint)
         self.paint()
 
     def configure(self, cnf=None, **kwargs):
         result = super().configure(cnf, **kwargs)
-        if hasattr(self, "variant"):
-            self.paint()
-        return result
-
-    def hovered(self, value):
-        self.hover = value
         self.paint()
+        return result
 
     def invoke(self, event=None):
         if str(self.cget("state")) != "disabled":
             self.focus_set()
             self.command()
-
-    def paint(self, event=None):
-        self.delete("all")
-        width = max(self.winfo_width(), int(self.cget("width"))) if self.winfo_width() < 2 else self.winfo_width()
-        height = int(self.cget("height"))
-        disabled = str(self.cget("state")) == "disabled"
-        if disabled:
-            fill, color, border = "#F1F4F8", "#B0BAC8", "#EBEFF4"
-        elif self.variant == "accent":
-            fill, color, border = ("#2469E4" if self.hover else BLUE), WHITE, BLUE
-        elif self.variant == "selected":
-            fill, color, border = PALE, BLUE, "#B8D1FD"
-        else:
-            fill, color, border = ("#F4F7FC" if self.hover else WHITE), "#526279", "#DEE5EF"
-        if self.focus_get() is self and not disabled:
-            border = BLUE
-        rounded(self, 1, 1, width - 1, height - 1, 9, fill=fill, outline=border)
-        caption = self.variable.get() if self.variable is not None else self.caption
-        self.create_text(width / 2, height / 2, text=caption, fill=color, font=(FONT, 10, "bold" if self.variant == "accent" else "normal"))
-
-
-class Navigation(tk.Canvas):
-    def __init__(self, parent, text, glyph, command):
-        super().__init__(parent, height=45, width=176, bg=SIDE, highlightthickness=0,
-                         bd=0, cursor="hand2", takefocus=True)
-        self.caption, self.glyph, self.command = text, glyph, command
-        self.selected = self.hover = False
-        self.bind("<Configure>", self.paint)
-        self.bind("<Button-1>", lambda _: command())
-        self.bind("<Return>", lambda _: command())
-        self.bind("<space>", lambda _: command())
-        self.bind("<Enter>", lambda _: self.hovered(True))
-        self.bind("<Leave>", lambda _: self.hovered(False))
-
-    def hovered(self, state):
-        self.hover = state
-        self.paint()
-
-    def paint(self, event=None):
-        self.delete("all")
-        width = self.winfo_width()
-        if self.selected or self.hover:
-            rounded(self, 0, 1, width - 1, 44, 11, fill="#E1EBFD" if self.selected else "#E9EEF6", outline="")
-        color = "#2567D9" if self.selected else "#647188"
-        self.create_text(25, 23, text=self.glyph, fill=color, font=("Segoe UI Symbol", 16))
-        self.create_text(51, 23, text=self.caption, fill=color, anchor="w", font=(FONT, 10, "bold" if self.selected else "normal"))
-
-
-class ModeRow(Button):
-    def __init__(self, parent, text, command):
-        self.selected = False
-        height = max(48, tkfont.Font(parent, family=FONT, size=10).metrics("linespace") + 20)
-        super().__init__(parent, text, command, width=300, height=height)
-
-    def invoke(self, event=None):
-        if not self.selected:
-            super().invoke(event)
-
-    def paint(self, event=None):
-        self.delete("all")
-        width = self.winfo_width() if self.winfo_width() > 1 else int(self.cget("width"))
-        height = int(self.cget("height"))
-        disabled = str(self.cget("state")) == "disabled"
-        fill = PALE if self.selected else "#F6F8FB"
-        color = "#53647C" if disabled else INK
-        accent = "#A8B8CE" if disabled else BLUE
-        border = BLUE if self.focus_get() is self and not disabled else fill
-        rounded(self, 1, 1, width - 1, height - 1, 10, fill=fill, outline=border)
-        cy = height / 2
-        self.create_oval(15, cy - 8, 31, cy + 8, outline=accent, width=2)
-        self.create_polygon(22, cy - 4, 22, cy + 4, 27, cy, fill=accent, outline="")
-        self.create_text(45, cy, text=self.caption, anchor="w", fill=color, font=(FONT, 10))
-        x = width - 57
-        track = accent if self.selected else "#CBD4E2"
-        rounded(self, x, cy - 12, x + 42, cy + 12, 12, fill=track, outline="")
-        knob = x + 30 if self.selected else x + 12
-        self.create_oval(knob - 9, cy - 9, knob + 9, cy + 9, fill=WHITE, outline="")
-
-
-class PageViewport(tk.Frame):
-    def __init__(self, parent):
-        super().__init__(parent, bg=BG)
-        self.columnconfigure(0, weight=1)
-        self.rowconfigure(0, weight=1)
-        self.canvas = tk.Canvas(self, bg=BG, bd=0, highlightthickness=0, width=1, height=1)
-        self.canvas.grid(row=0, column=0, sticky="nsew")
-        self.scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
-        self.scrollbar.grid(row=0, column=1, sticky="ns", padx=(8, 0))
-        self.content = tk.Frame(self.canvas, bg=BG)
-        self.slot = self.canvas.create_window(0, 0, window=self.content, anchor="nw")
-        self.canvas.configure(yscrollcommand=self.scrollbar.set)
-        self.canvas.bind("<Configure>", self.resize)
-        self.content.bind("<Configure>", self.resize)
-        self.winfo_toplevel().bind("<MouseWheel>", self.wheel, add=True)
-
-    def resize(self, event=None):
-        width = max(1, self.canvas.winfo_width())
-        self.canvas.itemconfigure(self.slot, width=width)
-        self.canvas.configure(scrollregion=(0, 0, width, self.content.winfo_reqheight()))
-
-    def wheel(self, event):
-        if (str(event.widget).startswith(str(self)) and not isinstance(event.widget, tk.Text)
-                and self.canvas.yview() != (0.0, 1.0)):
-            self.canvas.yview_scroll(-int(event.delta / 120), "units")
-            return "break"
-
-
-class Swatch(Button):
-    def __init__(self, parent, color, command):
-        self.color = color
-        self.selected = False
-        super().__init__(parent, "", command, width=34, height=34)
 
     def paint(self, event=None):
         self.delete("all")
@@ -227,6 +80,7 @@ class ModernDesktopApp(LegacyDesktopApp):
                   foreground=[("disabled", "#A2ADBC")])
         style.configure("TEntry", padding=9, fieldbackground=WHITE, foreground=INK,
                         bordercolor="#DFE6F0", lightcolor=WHITE, darkcolor=WHITE)
+
         style.configure("Horizontal.TScale", background=WHITE, troughcolor="#E6EEFB", borderwidth=0)
 
     def _build(self):
@@ -268,7 +122,7 @@ class ModernDesktopApp(LegacyDesktopApp):
         self.navigation["settings"] = settings_nav
         tk.Frame(bottom, bg="#E0E6F0", height=1).pack(fill="x", padx=10, pady=16)
         label(bottom, "OmiPet Desktop", size=9, color=MUTED).pack(anchor="w", padx=12)
-        label(bottom, "0.3  ·  USB 控制台", size=8, color="#A2ACBB").pack(anchor="w", padx=12, pady=(3, 0))
+        label(bottom, "0.4  ·  USB 控制台", size=8, color="#A2ACBB").pack(anchor="w", padx=12, pady=(3, 0))
 
         main = tk.Frame(self.window, bg=BG)
         main.pack(side="left", fill="both", expand=True)
@@ -586,6 +440,7 @@ class ModernDesktopApp(LegacyDesktopApp):
         self.brightness_text.set(f"{round(float(value) / 255 * 100)}%")
         if hasattr(self, "preview"):
             self._preview()
+
 
     def _preview(self):
         if not hasattr(self, "preview"):

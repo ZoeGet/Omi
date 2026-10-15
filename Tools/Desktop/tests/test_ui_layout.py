@@ -5,7 +5,8 @@ from tkinter import font as tkfont
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from modern_ui import Button, Card, ModernDesktopApp
+from modern_ui import Button, Card, ModernDesktopApp, PageViewport
+import customtkinter as ctk
 
 
 class LayoutTests(unittest.TestCase):
@@ -34,12 +35,10 @@ class LayoutTests(unittest.TestCase):
                     self.assertEqual(local.winfo_width(), monitor.winfo_width())
                     for row in app.mode_rows.values():
                         self.assertGreaterEqual(row.winfo_height(), row.winfo_reqheight())
-                        for item in row.find_all():
-                            if row.type(item) == "text":
-                                x1, y1, x2, y2 = row.bbox(item)
-                                self.assertGreaterEqual(y1, 0)
-                                self.assertLessEqual(y2, row.winfo_height())
-                                self.assertLessEqual(x2, row.winfo_width() - 65)
+                        title = row.title_label
+                        self.assertGreaterEqual(title.winfo_height(), title.winfo_reqheight())
+                        self.assertLessEqual(title.winfo_x() + title.winfo_width(), row.switch.winfo_x())
+                        self.assertIsInstance(row.switch, ctk.CTkSwitch)
                     app.page_host.canvas.yview_moveto(1)
                     window.update_idletasks()
                     self.assertAlmostEqual(app.page_host.canvas.yview()[1], 1.0)
@@ -62,20 +61,74 @@ class LayoutTests(unittest.TestCase):
             app.monitor_button.invoke()
             self.assertEqual(requested, ["monitor"])
             self.assertFalse(app.monitor_button.selected)
+            app.monitor_button.switch.toggle()
+            self.assertFalse(app.monitor_button.switch.get())
+            self.assertEqual(requested, ["monitor", "monitor"])
             app.snapshot.update(monitorRequested=True, state=dict(mode="monitor", monitorOutput="connected"))
             app._controls()
             self.assertFalse(app.local_button.selected)
             self.assertTrue(app.monitor_button.selected)
             app.monitor_button.invoke()
-            self.assertEqual(requested, ["monitor"])
+            self.assertEqual(requested, ["monitor", "monitor"])
             app.local_button.invoke()
-            self.assertEqual(requested, ["monitor", "local"])
+            self.assertEqual(requested, ["monitor", "monitor", "local"])
             app.snapshot["state"] = None
             app._controls()
             self.assertFalse(app.local_button.selected)
             self.assertFalse(app.monitor_button.selected)
         finally:
             self.dispose(window)
+
+    def test_scrollbar_appears_only_for_overflow_and_hides_after_resize_or_page_change(self):
+        window = tk.Tk()
+        try:
+            window.geometry("500x500+10000+10000")
+            viewport = PageViewport(window)
+            viewport.pack(fill="both", expand=True)
+            content = tk.Frame(viewport.content, width=300, height=200)
+            content.pack()
+            window.update()
+            self.assertFalse(viewport.scrollbar_visible)
+            self.assertFalse(viewport.scrollbar.winfo_ismapped())
+            self.assertEqual(viewport.canvas.winfo_width(), viewport.winfo_width())
+            content.configure(height=900)
+            window.update()
+            self.assertTrue(viewport.scrollbar_visible)
+            self.assertIsInstance(viewport.scrollbar, ctk.CTkScrollbar)
+            viewport.canvas.yview_moveto(1)
+            window.update_idletasks()
+            self.assertAlmostEqual(viewport.canvas.yview()[1], 1.0)
+            window.geometry("500x1000+10000+10000")
+            window.update()
+            self.assertFalse(viewport.scrollbar_visible)
+            window.geometry("500x500+10000+10000")
+            window.update()
+            self.assertTrue(viewport.scrollbar_visible)
+            content.pack_forget()
+            tk.Frame(viewport.content, width=300, height=100).pack()
+            window.update()
+            self.assertFalse(viewport.scrollbar_visible)
+            self.assertEqual(viewport.canvas.yview(), (0.0, 1.0))
+        finally:
+            self.dispose(window)
+
+    def test_regular_window_fits_every_page_without_a_scrollbar(self):
+        window = tk.Tk()
+        try:
+            window.tk.call("tk", "scaling", 1.3333333333)
+            app = ModernDesktopApp(window, demo=False)
+            window.geometry("1160x820+10000+10000")
+            window.update()
+            for page in app.pages:
+                app.show_page(page)
+                window.update()
+                self.assertLessEqual(app.page_host.content.winfo_reqheight(), app.page_host.canvas.winfo_height(), page)
+                self.assertFalse(app.page_host.scrollbar_visible, page)
+                self.assertFalse(app.page_host.scrollbar.winfo_ismapped(), page)
+        finally:
+            self.dispose(window)
+
+
 
     def test_pages_fit_minimum_window_and_monitor_locks_all_light_actions(self):
         try:
