@@ -1,5 +1,4 @@
 import copy
-import json
 import os
 from pathlib import Path
 import sys
@@ -7,7 +6,8 @@ import time
 
 TOOLS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(TOOLS / "DeviceBridge"))
-from bridge import Bridge, Health, read_bound_view
+from bridge import Bridge, Health
+from state_view import LifecycleReader
 from protocol import Limits, ProtocolError, validate_light
 from simulator import DeviceSimulator, HostSession
 from usb_client import UsbClient
@@ -26,13 +26,7 @@ def default_monitor_root():
 
 
 def monitor_reader(root, bindings):
-    def read():
-        try:
-            identities = json.loads(Path(bindings).read_text(encoding="utf-8-sig"))
-        except (OSError, ValueError, UnicodeError):
-            identities = None
-        return read_bound_view(Path(root), identities, max_age_seconds=MAX_AGE_SECONDS)
-    return read
+    return LifecycleReader(root, bindings, max_age_seconds=MAX_AGE_SECONDS)
 
 
 class ControlSession:
@@ -83,6 +77,8 @@ class ControlSession:
         if not self.client.host or not self.client.host.freshness_challenge:
             raise ProtocolError("freshness-challenge-required")
         self.connect(local=False)
+        if hasattr(self.reader, "reset"):
+            self.reader.reset()
         self.bridge = Bridge(self.client, self.reader, interval_seconds=INTERVAL_SECONDS,
                              reopen=self.reopen,
                              allow_fresh_display=True,

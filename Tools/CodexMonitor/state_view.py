@@ -160,6 +160,45 @@ def read_bound_view(root, bindings, *, process_checker=check_process,
     return result
 
 
+class LifecycleReader:
+    def __init__(self, root, bindings_path, *, max_age_seconds, process_checker=check_process,
+                 monotonic_ns=time.monotonic_ns):
+        self.root, self.bindings_path = Path(root), Path(bindings_path)
+        self.max_age_seconds = max_age_seconds
+        self.process_checker, self.monotonic_ns = process_checker, monotonic_ns
+        self.admitted = {}
+
+    def reset(self):
+        self.admitted.clear()
+
+    def __call__(self):
+        try:
+            bindings = json.loads(self.bindings_path.read_text(encoding="utf-8-sig"))
+        except (OSError, ValueError, UnicodeError):
+            bindings = None
+        view = read_bound_view(self.root, bindings, max_age_seconds=self.max_age_seconds,
+                               process_checker=self.process_checker, monotonic_ns=self.monotonic_ns)
+        retained = {}
+        if view.get("bindingState") == "event-correlated" and view["sourceState"] == "readable":
+            for entry in view["sessions"]:
+                session_id = entry["sessionId"]
+                record = bindings["sessions"].get(session_id)
+                if (entry.get("hostProcessState") != "running" or entry["reason"] not in
+                        ("within-monotonic-budget", "observation-expired")):
+                    continue
+                proof = json.dumps(record, sort_keys=True, separators=(",", ":"))
+                if (entry["reason"] == "within-monotonic-budget"
+                        or self.admitted.get(session_id) == proof):
+                    retained[session_id] = proof
+                    #  限制：漏结束事件会保留状态，待逐聊天校验接口替换。 / shortcut: missed end events retain state; replace when per-chat verification is available.
+                    entry.update(displayStatus=entry["lastObservedStatus"], reason="observed-lifecycle",
+                                 assessmentAgeSeconds=0)
+        self.admitted = retained
+        view["statusBasis"] = "observed-lifecycle"
+        view["overallStatus"] = overall_status(view["sessions"])
+        return view
+
+
 def positive_seconds(value):
     try:
         seconds = float(value)

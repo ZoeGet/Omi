@@ -237,6 +237,10 @@ class SnapshotMapper:
             host = entry.get("hostProcessState", "unverified")
             display = entry.get("displayStatus", "unknown")
             budget, age = view.get("maxAgeSeconds"), entry.get("observationAgeSeconds")
+            if (view.get("statusBasis") == "observed-lifecycle"
+                    and view.get("bindingState") == "event-correlated"
+                    and entry.get("reason") == "observed-lifecycle"):
+                age = entry.get("assessmentAgeSeconds")
             age = age + lag + delivery_reserve_seconds if type(age) in (int, float) and lag >= 0 else None
             fresh = (type(budget) in (int, float) and math.isfinite(budget) and budget > 0
                      and type(age) in (int, float) and math.isfinite(age) and 0 <= age <= budget and lag >= 0)
