@@ -22,6 +22,9 @@ class DeviceWorker(threading.Thread):
 
     def publish(self, kind, **values):
         self.events.put(dict(kind=kind, **values))
+        #  界面只消费汇总诊断，成功或失败通知后均丢弃明细 / The UI consumes summary diagnostics; discard traces after success or failure notifications
+        if self.session:
+            self.session.client.round_trips.clear()
 
     def status(self):
         self.publish("status", **self.session.snapshot(),
