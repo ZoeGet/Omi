@@ -50,10 +50,13 @@ def atomic_json(path, data):
 
 def new_turn(turn_id):
     return dict(turnId=turn_id, closed=False, baseStatus="working", pendingToolIds=[],
-                completedToolIds=[], unattributedApproval=False, approvalUnconfirmed=False)
+                completedToolIds=[], pendingInputIds=[], completedInputIds=[],
+                unattributedApproval=False, approvalUnconfirmed=False)
 
 
 def turn_status(state):
+    if state.get("pendingInputIds"):
+        return "waitingApproval"
     if state["closed"]:
         return "idle"
     if state["pendingToolIds"]:
@@ -73,6 +76,29 @@ def aggregate(statuses, baseline="unknown"):
     return baseline
 
 
+def answered_calls(prompt):
+    if not isinstance(prompt, str):
+        return set()
+    match = re.fullmatch(r"\s*<send_user_message_question_reply>\s*(.*?)\s*</send_user_message_question_reply>\s*",
+                         prompt, re.DOTALL)
+    if not match:
+        return set()
+    try:
+        replies = json.loads(match[1])
+        if not isinstance(replies, list):
+            return set()
+        calls = set()
+        for reply in replies:
+            key = json.loads(reply["questionItemId"])
+            if (isinstance(key, list) and len(key) == 3
+                    and key[0] == "request_user_input_async" and isinstance(key[1], str)
+                    and type(key[2]) is int and key[2] >= 0):
+                calls.add(key[1])
+        return calls
+    except (ValueError, KeyError, TypeError):
+        return set()
+
+
 def collect(root, payload):
     session_id = str(payload.get("session_id") or "")
     if not session_id.strip():
@@ -86,6 +112,9 @@ def collect(root, payload):
     with monitor_lock(root):
         previous = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
         turns = {state["turnId"]: state for state in previous.get("turnStates", [])}
+        for state in turns.values():
+            state.setdefault("pendingInputIds", [])
+            state.setdefault("completedInputIds", [])
         baseline = previous.get("baselineStatus", "unknown")
         session_closed = previous.get("status") == "offline"
         if previous.get("schema") == 1 and previous.get("turnId"):
@@ -101,10 +130,17 @@ def collect(root, payload):
 
         applied = True
         selected_status = None
+        if event_name == "UserPromptSubmit":
+            answered = answered_calls(payload.get("prompt"))
+            for state in turns.values():
+                matched = answered.intersection(state["pendingInputIds"])
+                state["pendingInputIds"] = [key for key in state["pendingInputIds"] if key not in matched]
+                state["completedInputIds"].extend(sorted(matched))
         if event_name == "SessionEnd":
             session_closed = True
             for state in turns.values():
                 state["closed"] = True
+                state["pendingInputIds"] = []
         elif event_name == "SessionStart":
             session_closed = False
             if not any(not state["closed"] for state in turns.values()):
@@ -112,14 +148,24 @@ def collect(root, payload):
         elif event_name in ("UserPromptSubmit", "PreToolUse", "PostToolUse", "PermissionRequest",
                             "Stop", "Interrupt", "SubagentStart"):
             state = turns.setdefault(turn_id, new_turn(turn_id))
-            if state["closed"]:
+            if state["closed"] and event_name != "Interrupt":
                 applied = False
             elif not turn_id:
                 state["baseStatus"] = "unknown"
                 applied = False
             else:
                 session_closed = False
-                if event_name == "PermissionRequest" or (
+                if (event_name in ("PreToolUse", "PostToolUse")
+                        and payload.get("tool_name") in ("request_user_input", "request_user_input_async")):
+                    if event_name == "PreToolUse" and tool_id and tool_id not in state["completedInputIds"]:
+                        if tool_id not in state["pendingInputIds"]:
+                            state["pendingInputIds"].append(tool_id)
+                    elif event_name == "PostToolUse" and tool_id and payload["tool_name"] == "request_user_input":
+                        state["pendingInputIds"] = [key for key in state["pendingInputIds"] if key != tool_id]
+                        if tool_id not in state["completedInputIds"]:
+                            state["completedInputIds"].append(tool_id)
+                    #  异步工具返回仅表示窗口已创建，不能当成用户已回答。 / Async return acknowledges creation, not an answer.
+                elif event_name == "PermissionRequest" or (
                         event_name == "PreToolUse" and payload.get("tool_name") == "request_permissions"):
                     if not tool_id:
                         state["unattributedApproval"] = True
@@ -138,9 +184,11 @@ def collect(root, payload):
                     state.update(closed=True, pendingToolIds=[], unattributedApproval=False,
                                  approvalUnconfirmed=False)
                     baseline = "idle"
+                    if event_name == "Interrupt":
+                        state["pendingInputIds"] = []
             selected_status = turn_status(state)
 
-        active = [state for state in turns.values() if not state["closed"]]
+        active = [state for state in turns.values() if not state["closed"] or state["pendingInputIds"]]
         status = "offline" if session_closed else aggregate([turn_status(state) for state in active], baseline)
         received_at = timestamp()
         metadata = dict(schema=2, sessionId=session_id, status=status, turnId=turn_id,
@@ -148,6 +196,7 @@ def collect(root, payload):
                         permissionMode=str(payload.get("permission_mode") or ""),
                         toolName=str(payload.get("tool_name") or ""), toolUseId=tool_id,
                         correlatedPendingCount=sum(len(state["pendingToolIds"]) for state in active),
+                        pendingInputCount=sum(len(state["pendingInputIds"]) for state in active),
                         hasUnattributedApproval=any(state["unattributedApproval"] for state in active),
                         approvalUnconfirmed=any(state["approvalUnconfirmed"] for state in active))
         event = dict(metadata, receivedAtUtc=received_at, hookEventName=event_name,

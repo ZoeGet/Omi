@@ -29,7 +29,7 @@ const colors = ['#FFFFFF', '#FF0000', '#00FF00', '#0000FF', '#FFFF00', '#FF00FF'
 const states = {
   idle: { title: '无任务 / 完成', color: '#20a66a', note: '绿色扩散灯' },
   working: { title: '运行中', color: '#e45d64', note: '红色扩散灯' },
-  waitingApproval: { title: '待审批', color: '#dba32c', note: '黄色扩散灯' },
+  waitingApproval: { title: '等待操作', color: '#dba32c', note: '审批或回复 · 黄色扩散灯' },
   unknown: { title: '来源异常', color: '#20a66a', note: '绿色扩散灯 · 状态仍为未知' },
 };
 const pages = [
@@ -198,7 +198,7 @@ export default function App() {
               <div className="setting-row" key={key}><TextField label={label} value={settings[key]} disabled={!canConfigure} size="small" fullWidth
                 onChange={event => device.settingsChanged({ [key]: event.target.value })} />
                 <Button variant="outlined" disabled={!canConfigure} onClick={() => void choose(directory)}>浏览</Button></div>)}
-            <Typography variant="body2" color="textSecondary">有效期 30 秒；保留既有传输余量，过期状态仍为 unknown，并按约定显示绿色。此处不修改 Hook 或 Codex 配置。</Typography>
+            <Typography variant="body2" color="textSecondary">监控期间延续已确认的运行与等待状态，收到结束事件后变绿；持续核对宿主进程。传输有效期 30 秒，保留既有余量；来源异常显示绿色，断联关灯。</Typography>
           </Card></div>}
         </main>
         <footer aria-live="polite">{device.notice}</footer>

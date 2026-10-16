@@ -78,7 +78,7 @@ describe('USB desktop', () => {
   it('shows device status, recovers to local after voice and clears state on disconnect', async () => {
     render(<App />);
     const user = await connect(monitor());
-    for (const [value, title] of [['working', '运行中'], ['waitingApproval', '待审批'], ['unknown', '来源异常']]) {
+    for (const [value, title] of [['working', '运行中'], ['waitingApproval', '等待操作'], ['unknown', '来源异常']]) {
       bridge.events.push(monitor(value));
       await waitFor(() => expect(screen.getByRole('status').textContent).toBe(title));
     }
