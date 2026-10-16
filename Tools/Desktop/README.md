@@ -14,7 +14,7 @@ Tauri + React + MUI 界面复用 Python 设备控制层，支持 USB 与已配�
 
 `App.tsx` 使用 CSS 响应式布局和 MUI 控件；没有窗口 resize 监听、手动画布重画或缩放延时。`backend.ts` 负责调用和显示事件，按既有 100 ms 界面轮询节奏读取后台结果；一轮完成后才安排下一轮。
 
-Rust 只启动固定相邻路径 `omi-device/omi-device.exe` 并串行转发 JSON。管道读写运行在后台，关闭窗口先等待释放，再销毁窗口。Python `backend.py` 复用同目录的 `worker.py` / `controller.py`、`DeviceBridge`、`CodexMonitor`；未复制设备协议、状态归并、重试、语音接管或租约逻辑。EOF 同样触发原有关闭流程；后台积压时只保留各类最新事件。
+Rust 只启动固定相邻路径 `omi-device/omi-device.exe` 并串行转发 JSON。管道读写运行在后台，关闭窗口先等待释放，再销毁窗口。Python `backend.py` 复用同目录的 `worker.py` / `controller.py`、`DeviceBridge`、`CodexMonitor`；USB/WSS 共用控制会话初始化、失败释放及协议重试。配对与控制共用 WSS 文本帧接收，各自保留消息校验和原超时。EOF 同样触发原有关闭流程；后台积压时只保留各类最新事件。
 
 监控启动时只接纳近期、事件证明匹配且宿主存活的记录；随后同一生命周期不会因没有新 Hook 而自动变绿。事件原始时间及年龄不改写，每次重新校验产生独立传输评估，缓存评估仍会过期。进程退出、身份变化、绑定失效或来源不可读会清除延续资格。重开监控不会复活过期历史记录。若 `Stop` 丢失而宿主仍存活，可能保留红/黄；宿主存活不能证明具体聊天还在运行，当前没有可靠的逐聊天独立状态校验。
 
