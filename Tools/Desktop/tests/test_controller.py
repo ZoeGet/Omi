@@ -1,10 +1,12 @@
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from controller import ControlSession, SimulatedClient, demo_reader
 from protocol import ProtocolError
+import controller
 
 
 def setting(**changes):
@@ -100,6 +102,29 @@ class ControllerTests(unittest.TestCase):
         self.assertFalse(self.control.monitor_requested)
         self.control.close()
         self.assertEqual(self.client.device.monitor_output(), "local")
+
+    def test_both_transports_connect_and_close_on_failed_handshake(self):
+        for wireless in (False, True):
+            for fails in (False, True):
+                with self.subTest(wireless=wireless, fails=fails):
+                    stream = Mock(is_open=False)
+                    client = SimulatedClient()
+                    if fails:
+                        client.connect = Mock(side_effect=ProtocolError('handshake-failed'))
+                    with patch('serial.Serial', return_value=stream), patch('wss_stream.WssStream', return_value=stream), \
+                         patch('controller.monitor_reader', return_value=demo_reader), patch('controller.UsbClient', return_value=client) as factory:
+                        connect = controller.open_wifi if wireless else controller.open_usb
+                        if fails:
+                            with self.assertRaisesRegex(ProtocolError, 'handshake-failed'):
+                                connect('test', Path('.'), Path('bindings.json'))
+                            stream.close.assert_called_once()
+                        else:
+                            session, actual_stream, health = connect('test', Path('.'), Path('bindings.json'))
+                            self.assertIs(actual_stream, stream)
+                            self.assertEqual(session.state['mode'], 'local')
+                            self.assertEqual(health is None, wireless)
+                            self.assertEqual(factory.call_args.kwargs['on_bytes'] is None, wireless)
+                            stream.open.assert_called_once()
 
 
 if __name__ == "__main__":

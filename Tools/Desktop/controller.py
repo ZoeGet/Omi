@@ -164,21 +164,10 @@ def demo_reader():
                     hostProcessState="running", observationAgeSeconds=0)])
 
 
-def open_usb(port, root, bindings):
-    import serial
-    stream = serial.Serial()
-    stream.port, stream.baudrate = port, 115200
-    stream.dtr = stream.rts = False
-    stream.timeout = INTERVAL_SECONDS
-    stream.write_timeout = TIMEOUT_SECONDS
-    health = Health(MAX_JSON_BYTES + 8)
+def _open_control(stream, root, bindings, reopen, health=None):
     client = UsbClient(stream, Limits(MAX_JSON_BYTES, MAX_SESSIONS),
-                       timeout_seconds=TIMEOUT_SECONDS, retries=RETRIES, on_bytes=health.feed)
+                       timeout_seconds=TIMEOUT_SECONDS, retries=RETRIES, on_bytes=health.feed if health else None)
     try:
-        def reopen():
-            if stream.is_open:
-                stream.close()
-            stream.open()
         session = ControlSession(client, monitor_reader(root, bindings), reopen)
         session.connect()
         return session, stream, health
@@ -187,14 +176,21 @@ def open_usb(port, root, bindings):
         raise
 
 
+def open_usb(port, root, bindings):
+    import serial
+    stream = serial.Serial()
+    stream.port, stream.baudrate = port, 115200
+    stream.dtr = stream.rts = False
+    stream.timeout = INTERVAL_SECONDS
+    stream.write_timeout = TIMEOUT_SECONDS
+    def reopen():
+        if stream.is_open:
+            stream.close()
+        stream.open()
+    return _open_control(stream, root, bindings, reopen, Health(MAX_JSON_BYTES + 8))
+
+
 def open_wifi(address, root, bindings):
     from wss_stream import WssStream
     stream = WssStream(address, timeout=TIMEOUT_SECONDS)
-    client = UsbClient(stream, Limits(MAX_JSON_BYTES, MAX_SESSIONS), timeout_seconds=TIMEOUT_SECONDS, retries=RETRIES)
-    try:
-        session = ControlSession(client, monitor_reader(root, bindings), stream.open)
-        session.connect()
-        return session, stream, None
-    except Exception:
-        stream.close()
-        raise
+    return _open_control(stream, root, bindings, stream.open)
