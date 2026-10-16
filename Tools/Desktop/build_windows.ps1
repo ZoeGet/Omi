@@ -3,11 +3,14 @@ $ErrorActionPreference = "Stop"
 $toolsDirectory = Split-Path -Parent $PSScriptRoot
 $buildDirectory = Join-Path $PSScriptRoot "build"
 $helperDirectory = Join-Path $buildDirectory "helper/omi-device"
+& $Python (Join-Path $toolsDirectory "DeviceBridge/native/build_windows.py")
+if ($LASTEXITCODE -ne 0) { throw "Pairing crypto build failed" }
 & $Python -m PyInstaller --noconfirm --console --onedir --name omi-device `
     --distpath (Join-Path $buildDirectory "helper") --workpath (Join-Path $buildDirectory "pyinstaller") `
     --specpath $buildDirectory --paths $PSScriptRoot `
     --paths (Join-Path $toolsDirectory "DeviceBridge") --paths (Join-Path $toolsDirectory "CodexMonitor") `
-    --copy-metadata pyserial (Join-Path $PSScriptRoot "backend.py")
+    --add-binary "$(Join-Path $buildDirectory 'crypto/omi_pake.dll');." `
+    --copy-metadata websocket-client --copy-metadata pyserial (Join-Path $PSScriptRoot "backend.py")
 if ($LASTEXITCODE -ne 0) { throw "Device backend packaging failed" }
 Push-Location $PSScriptRoot
 try {

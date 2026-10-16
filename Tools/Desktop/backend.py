@@ -32,6 +32,9 @@ class Backend:
         self.demo = demo
         self.events = EventBuffer()
         self.worker = None
+        self.pairing_worker = None
+        self.pairing_socket = None
+        self.pairing_stop = threading.Event()
         self.connected = self.busy = False
 
     def ports(self):
@@ -49,9 +52,17 @@ class Backend:
                 self.connected = self.busy = False
             elif event["kind"] == "command":
                 self.busy = False
+            elif event["kind"] == "pairing":
+                self.busy = False
         return events
 
     def close(self):
+        if self.pairing_worker:
+            self.pairing_stop.set()
+            if self.pairing_socket:
+                self.pairing_socket.close()
+            self.pairing_worker.join()
+            self.pairing_worker = None
         if self.worker:
             self.worker.stop()
             #  等待原工作线程完成既有释放流程，不增加另一套超时 / Wait for the existing worker release flow without introducing another timeout
@@ -65,6 +76,45 @@ class Backend:
         if action == "ports":
             return self.ports()
         if action == "poll":
+            return None
+        if action == "paired-devices":
+            from wireless_pairing import PairingStore
+            return [] if self.demo else PairingStore().devices()
+        if action in ("pair", "verify-wireless"):
+            fields = {"address", "code"} if action == "pair" else {"address"}
+            if (self.demo or self.busy or self.pairing_worker and self.pairing_worker.is_alive()
+                    or not isinstance(body, dict) or set(body) != fields
+                    or any(not isinstance(value, str) or "\0" in value for value in body.values())):
+                raise ValueError("invalid-pairing-request")
+            from wireless_pairing import endpoint, pair_device, verify_device, PairingSocket
+            address = endpoint(body["address"])
+            code = body.get("code", "")
+            if action == "pair" and (len(code) != 6 or not code.isascii() or not code.isdecimal()):
+                raise ValueError("配对码必须为六位数字")
+            def run_pairing():
+                try:
+                    def connect(address, pin=None):
+                        wire = PairingSocket(address, pin)
+                        self.pairing_socket = wire
+                        if self.pairing_stop.is_set():
+                            wire.close()
+                            raise ConnectionError("cancelled")
+                        return wire
+                    if action == "pair":
+                        pair_device(address, code, socket_factory=connect)
+                    else:
+                        verify_device(address, socket_factory=connect)
+                    self.events.put(dict(kind="pairing", ok=True, command=action))
+                except Exception:
+                    #  网络异常可能包含对端内容，不把原始异常或配对码写入操作记录 / Network errors may contain peer data; never log raw exceptions or pairing codes
+                    self.events.put(dict(kind="pairing", ok=False, command=action,
+                        error="无线验证未完成：请核对地址、屏幕配对码和网络；若最后确认丢失，可点击验证连接。"))
+                finally:
+                    self.pairing_socket = None
+            self.busy = True
+            self.pairing_stop.clear()
+            self.pairing_worker = threading.Thread(target=run_pairing, name="omi-pairing")
+            self.pairing_worker.start()
             return None
         if action == "close":
             self.close()
@@ -104,7 +154,7 @@ class Backend:
                     or not isinstance(message["action"], str)):
                 raise ValueError("invalid-request")
             action, body = message["action"], message["body"]
-            if action not in ("connect", "light") and body is not None:
+            if action not in ("connect", "light", "pair", "verify-wireless") and body is not None:
                 raise ValueError("unexpected-body")
             result = dict(ok=True, result=self.dispatch(action, body))
         except Exception as error:

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { Button, Chip, CssBaseline, MenuItem, Paper, Select, Slider, Switch, TextField,
   ThemeProvider, ToggleButton, ToggleButtonGroup, Typography, createTheme } from '@mui/material';
@@ -35,7 +35,7 @@ const states = {
 const pages = [
   { id: 'overview', title: '设备概览', icon: <DashboardOutlined />, caption: '让设备状态清晰可见，让每一次控制简单直接。' },
   { id: 'lights', title: '灯光与灯效', icon: <LightModeOutlined />, caption: '一点颜色，一种氛围。为你的桌面设置合适的光。' },
-  { id: 'pairing', title: '无线配对', icon: <LinkOutlined />, caption: 'USB 控制已接入，无线连接仍待开发。' },
+  { id: 'pairing', title: '无线配对', icon: <LinkOutlined />, caption: '在同一局域网中，使用设备屏幕上的六位码建立信任。' },
   { id: 'diagnostics', title: '连接诊断', icon: <MonitorHeartOutlined />, caption: '查看通信质量、设备健康和操作结果。' },
   { id: 'settings', title: '设置', icon: <SettingsOutlined />, caption: '指定本机 Codex 状态来源，断开连接后可修改。' },
 ];
@@ -60,6 +60,17 @@ export default function App() {
   const [color, setColor] = useState('#FFFFFF');
   const [brightness, setBrightness] = useState(16);
   const [effect, setEffect] = useState<keyof typeof effects>('常亮');
+  const [address, setAddress] = useState('');
+  const [pairingCode, setPairingCode] = useState('');
+  const [pairedDevices, setPairedDevices] = useState<{ address: string; confirmed: boolean }[]>([]);
+  useEffect(() => {
+    if (page !== 'pairing' || !device.ready || device.busy) return;
+    let cancelled = false;
+    device.request('paired-devices').then(reply => {
+      if (!cancelled && reply.ok) setPairedDevices(reply.result as typeof pairedDevices);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [page, device.ready, device.busy, device.request]);
   const { connected, busy, snapshot, settings } = device;
   const monitoring = Boolean(snapshot.monitorRequested);
   const confirmed = snapshot.state;
@@ -179,9 +190,21 @@ export default function App() {
               <Button variant="contained" disabled={!editable} onClick={applyLight}>应用灯光设置</Button>
             </Paper>
           </div>}
-          {page === 'pairing' && <div className="detail-stack"><Card title="局域网无线配对" caption="尚未接入，不影响现有 USB 控制">
-            <p>规划采用设备屏幕显示的六位随机数字码，5 分钟有效，最多 5 次错误。</p>
-            <Typography variant="body2" color="textSecondary">仅未配对设备在启动时开放；USB 优先，语音始终优先。此页尚不能配对或重置设备。</Typography>
+          {page === 'pairing' && <div className="detail-stack"><Card title="添加设备" caption="设备与电脑连接同一 Wi-Fi 后，输入屏幕上的地址和配对码">
+            <div className="setting-row"><TextField label="设备地址" placeholder="例如 192.168.1.20" fullWidth size="small"
+              value={address} disabled={busy} onChange={event => setAddress(event.target.value)} /></div>
+            <div className="setting-row"><TextField label="六位配对码" type="password" fullWidth size="small" value={pairingCode}
+              disabled={busy} autoComplete="off" slotProps={{ htmlInput: { inputMode: 'numeric', maxLength: 6 } }}
+              onChange={event => setPairingCode(event.target.value.replace(/\D/g, '').slice(0, 6))} />
+              <Button variant="contained" disabled={!device.ready || device.demo || busy || !address.trim() || pairingCode.length !== 6}
+                onClick={() => { void device.send('pair', { address: address.trim(), code: pairingCode }); setPairingCode(''); }}>配对</Button></div>
+            <Typography variant="body2" color="textSecondary">配对码 5 分钟有效，最多 5 次错误。仅未配对设备在启动时开放；过期后请重启设备。</Typography>
+          </Card><Card title="已保存设备" caption="验证连接会核对设备身份，不改变灯光模式">
+            {pairedDevices.length ? pairedDevices.map(item => <div className="setting-row" key={item.address}>
+              <Typography variant="body2" sx={{ flex: 1, overflowWrap: 'anywhere' }}>{item.address}<br />{item.confirmed ? '已配对' : '等待最后确认，可验证连接恢复'}</Typography>
+              <Button disabled={busy} onClick={() => void device.send('verify-wireless', { address: item.address })}>验证连接</Button>
+            </div>) : <Typography variant="body2" color="textSecondary">尚无已保存的无线设备。</Typography>}
+            <Typography variant="body2" color="textSecondary">当前先验证无线配对与重连；灯光和监控控制仍使用 USB。</Typography>
           </Card></div>}
           {page === 'diagnostics' && <div className="detail-stack">
             <Card title="通信与设备健康" caption="本次连接内的汇总，不保存原始会话内容">

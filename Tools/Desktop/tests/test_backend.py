@@ -5,6 +5,7 @@ import subprocess
 import sys
 import time
 import unittest
+from unittest.mock import patch
 
 BACKEND = Path(__file__).resolve().parents[1] / "backend.py"
 spec = importlib.util.spec_from_file_location("tauri_backend", BACKEND)
@@ -13,6 +14,25 @@ spec.loader.exec_module(module)
 
 
 class BackendTests(unittest.TestCase):
+    def test_pairing_runs_off_request_thread_and_redacts_errors(self):
+        self.backend.demo = False
+        entered, release = module.threading.Event(), module.threading.Event()
+        def fail(*args, **kwargs):
+            entered.set()
+            release.wait(5)
+            raise ValueError("private proof 123456")
+        with patch("wireless_pairing.pair_device", side_effect=fail):
+            try:
+                self.assertTrue(self.request("pair", dict(address="192.0.2.1", code="123456"))["ok"])
+                self.assertTrue(entered.wait(1))
+                self.assertTrue(self.request("poll")["ok"])
+                self.assertFalse(self.request("pair", dict(address="192.0.2.1", code="123456"))["ok"])
+            finally:
+                release.set()
+            event = self.wait_for("pairing")
+            self.assertFalse(event["ok"])
+            self.assertNotIn("123456", json.dumps(event))
+
     def setUp(self):
         self.backend = module.Backend(demo=True)
         self.received = []

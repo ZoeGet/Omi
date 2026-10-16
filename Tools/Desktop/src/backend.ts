@@ -4,6 +4,7 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 export type Light = { effect: string; red: number; green: number; blue: number; brightness: number };
 export type Port = { device: string; description: string };
 export type Settings = { port: string; root: string; bindings: string };
+type RequestBody = Settings | Light | { address: string; code?: string } | null;
 export type Snapshot = {
   state: { mode: string; displayStatus: string; monitorOutput?: string; leaseActive: boolean } | null;
   monitorRequested: boolean; monitorLights: boolean; monitorGreenOff: boolean; operations: string[];
@@ -52,6 +53,11 @@ export function applyEvents(state: State, events: WorkerEvent[]): State {
       case 'command':
         state = log({ ...state, busy: false }, event.ok ? commands[event.command!] : errorText(event.error!));
         break;
+      case 'pairing':
+        state = log({ ...state, busy: false }, event.ok
+          ? event.command === 'pair' ? '无线配对已保存。' : '无线设备身份验证通过。'
+          : event.error!);
+        break;
       case 'update-error':
         state = { ...state, snapshot: { ...state.snapshot, state: null } };
         if (state.notice !== errorText(event.error!)) state = log(state, errorText(event.error!));
@@ -75,7 +81,7 @@ export function useDevice() {
     ports: [], settings: { port: '', root: '', bindings: '' }, snapshot: {}, logs: [],
     notice: native ? '正在启动设备后台…' : '浏览器仅预览界面，请打开桌面程序连接设备。' });
   const report = useCallback((text: string) => setState(value => log(value, text)), []);
-  const request = useCallback(async (action: string, body: Settings | Light | null = null) => {
+  const request = useCallback(async (action: string, body: RequestBody = null) => {
     const reply = await invoke<Reply>('request', { message: { action, body } });
     setState(value => applyEvents(reply.ok ? value : log({ ...value, busy: false }, errorText(reply.error!)), reply.events));
     return reply;
@@ -109,7 +115,7 @@ export function useDevice() {
     return () => { disposed = true; clearTimeout(timer); };
   }, [native, report]);
 
-  async function send(action: string, body: Settings | Light | null = null) {
+  async function send(action: string, body: RequestBody = null) {
     if (!state.ready || state.busy) return;
     setState(value => ({ ...value, busy: true }));
     try { await request(action, body); }
@@ -128,5 +134,5 @@ export function useDevice() {
   function settings(patch: Partial<Settings>) {
     setState(value => ({ ...value, settings: { ...value.settings, ...patch } }));
   }
-  return { ...state, native, send, refresh, settingsChanged: settings, report };
+  return { ...state, native, send, refresh, request, settingsChanged: settings, report };
 }

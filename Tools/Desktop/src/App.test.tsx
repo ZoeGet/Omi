@@ -25,11 +25,25 @@ beforeEach(() => {
   bridge.native = true;
   bridge.events = [];
   bridge.invoke.mockReset().mockImplementation(async (_command, { message }) => ({ ok: true,
-    result: message.action === 'init' ? { demo: false, root: 'C:/state', bindings: 'C:/binding.json', ports: [{ device: 'COM17', description: 'OmiPet' }] } : null,
+    result: message.action === 'init' ? { demo: false, root: 'C:/state', bindings: 'C:/binding.json', ports: [{ device: 'COM17', description: 'OmiPet' }] } : message.action === 'paired-devices' ? [] : null,
     events: bridge.events.splice(0) }));
 });
 
 describe('USB desktop', () => {
+  it('clears the pairing code on submit and waits for the backend result', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: '无线配对' }));
+    await user.type(screen.getByLabelText('设备地址'), '192.0.2.1');
+    await user.type(screen.getByLabelText('六位配对码'), '123456');
+    await user.click(screen.getByRole('button', { name: /^配对$/ }));
+    expect((screen.getByLabelText('六位配对码') as HTMLInputElement).value).toBe('');
+    expect((screen.getByRole('button', { name: /^配对$/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect(bridge.invoke.mock.calls.some(([, args]) => args.message.action === 'pair' && args.message.body.code === '123456')).toBe(true);
+    expect(screen.queryByText('无线配对已保存。')).toBeNull();
+    bridge.events.push({ kind: 'pairing', ok: true, command: 'pair' });
+    await waitFor(() => expect(screen.getByText('无线配对已保存。')).toBeTruthy());
+  });
   it('requires confirmed mode changes and locks lights while monitoring', async () => {
     render(<App />);
     expect((screen.getByRole('switch', { name: '本地灯光' }) as HTMLInputElement).disabled).toBe(true);

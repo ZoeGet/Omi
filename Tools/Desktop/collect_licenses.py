@@ -32,7 +32,8 @@ def collect(output):
         if not licenses:
             missing.append(label)
         texts.append(label + "\n\n" + "\n\n".join(file.read_text(encoding="utf-8", errors="replace") for file in licenses))
-    for name in ("pyserial", "pyinstaller"):
+    texts.append("Mbed TLS 2.28.7\n\n" + (root / "build/crypto/MBEDTLS-LICENSE.txt").read_text(encoding="utf-8"))
+    for name in ("pyserial", "pyinstaller", "websocket-client"):
         package = distribution(name)
         licenses = [package.locate_file(file) for file in package.files if ".dist-info/" in str(file) and pattern.match(file.name)]
         if not licenses:
