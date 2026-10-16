@@ -7,6 +7,7 @@ from pathlib import Path
 import time
 
 from process_probe import check as check_process
+from collector import monitor_lock
 
 
 STATUSES = {"working", "waitingApproval", "idle", "offline", "unknown"}
@@ -172,12 +173,20 @@ class LifecycleReader:
         self.admitted.clear()
 
     def __call__(self):
+        #  与事件包装器共用原有互斥锁，读取同一次完整发布。 / Share the event wrapper's existing mutex to read a complete publication.
         try:
-            bindings = json.loads(self.bindings_path.read_text(encoding="utf-8-sig"))
-        except (OSError, ValueError, UnicodeError):
-            bindings = None
-        view = read_bound_view(self.root, bindings, max_age_seconds=self.max_age_seconds,
-                               process_checker=self.process_checker, monotonic_ns=self.monotonic_ns)
+            with monitor_lock(self.root):
+                try:
+                    bindings = json.loads(self.bindings_path.read_text(encoding="utf-8-sig"))
+                except (OSError, ValueError, UnicodeError):
+                    bindings = None
+                view = read_bound_view(self.root, bindings, max_age_seconds=self.max_age_seconds,
+                                       process_checker=self.process_checker, monotonic_ns=self.monotonic_ns)
+        except (OSError, TimeoutError):
+            self.reset()
+            view = project(None, max_age_seconds=self.max_age_seconds)
+            view["sourceState"] = "unavailable"
+            view["sourceReason"] = "source-lock-unavailable"
         retained = {}
         if view.get("bindingState") == "event-correlated" and view["sourceState"] == "readable":
             for entry in view["sessions"]:

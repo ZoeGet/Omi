@@ -5,6 +5,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 TOOLS = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(TOOLS / "CodexMonitor"), str(TOOLS / "DeviceBridge"), str(TOOLS / "Desktop")]
@@ -108,6 +109,15 @@ class LifecycleReaderTests(unittest.TestCase):
         self.advance(22)
         self.assertEqual(self.wire(view)["overallStatus"], "unknown")
         self.assertEqual(self.wire(self.reader())["overallStatus"], "working")
+
+    def test_unavailable_lock_forgets_retention_without_renewing_old_state(self):
+        self.reader()
+        self.advance(31)
+        with patch("state_view.monitor_lock", side_effect=TimeoutError):
+            view = self.reader()
+        self.assertEqual(view["overallStatus"], "unknown")
+        self.assertEqual(view["sourceReason"], "source-lock-unavailable")
+        self.assertEqual(self.reader()["overallStatus"], "unknown")
 
     def test_desktop_device_flow_keeps_lifecycle_and_disconnect_lease(self):
         self.clock = time.monotonic_ns()
