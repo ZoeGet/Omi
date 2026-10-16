@@ -189,21 +189,6 @@ uint32_t Strip::color(uint8_t red, uint8_t green, uint8_t blue) const {
   return pixels_.Color(red, green, blue);
 }
 
-//  根据 0 到 255 的位置生成一圈彩虹色 / Generate a rainbow color from a 0-to-255 wheel position
-uint32_t Strip::colorWheel(uint8_t position) const {
-  //  把 0 到 255 的位置映射为红、绿、蓝连续过渡的颜色 / Map position 0 through 255 to a continuous red-green-blue color transition
-  position = 255 - position;
-  if (position < 85) {
-    return color(255 - position * 3, 0, position * 3);
-  }
-  if (position < 170) {
-    position -= 85;
-    return color(0, position * 3, 255 - position * 3);
-  }
-  position -= 170;
-  return color(position * 3, 255 - position * 3, 0);
-}
-
 //  动画控制器只保存状态，并通过引用操作 Strip，不直接拥有硬件对象 / The effect controller stores state and operates on Strip by reference without owning hardware
 EffectController::EffectController(Strip& strip) : strip_(strip) {}
 

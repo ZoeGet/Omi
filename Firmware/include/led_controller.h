@@ -37,8 +37,6 @@ class Strip {
                    uint8_t value);
   //  将 RGB 转换为 NeoPixel 打包颜色 / Convert RGB to a NeoPixel packed color
   uint32_t color(uint8_t red, uint8_t green, uint8_t blue) const;
-  //  根据色轮位置生成颜色 / Generate a color from a color-wheel position
-  uint32_t colorWheel(uint8_t position) const;
   //  获取底层 NeoPixel 对象 / Get the underlying NeoPixel object
   Adafruit_NeoPixel& pixels();
   //  获取只读底层 NeoPixel 对象 / Get the read-only underlying NeoPixel object

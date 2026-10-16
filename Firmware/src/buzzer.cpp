@@ -15,7 +15,6 @@ bool PassiveBuzzer::begin(uint8_t pin, uint8_t channel) {
   channel_ = channel;
   initialized_ = false;
   playing_ = false;
-  muted_ = false;
   lastError_ = BuzzerError::None;
 
   //  先将引脚配置为低电平，避免上电误鸣叫 / Drive the pin low first to prevent a startup chirp
@@ -57,8 +56,6 @@ bool PassiveBuzzer::startTone(uint32_t frequencyHz,
 
   startedAtMs_ = millis();
   durationMs_ = durationMs;
-  frequencyHz_ = frequencyHz;
-  dutyPercent_ = dutyPercent;
   playing_ = true;
   lastError_ = BuzzerError::None;
   return true;
@@ -89,31 +86,6 @@ void PassiveBuzzer::update() {
   }
 }
 
-//  设置静音状态，并同步关闭或恢复当前音调 / Set mute state and silence or restore the active tone
-void PassiveBuzzer::setMute(bool muted) {
-  muted_ = muted;
-  if (!initialized_ || !playing_) {
-    return;
-  }
-
-  //  静音只关闭 PWM 占空比，恢复时重新应用原音符 / Mute only disables PWM duty; restore the current tone when unmuted
-  if (muted_) {
-    ledcWrite(channel_, 0);
-  } else {
-    applyTone(frequencyHz_, dutyPercent_);
-  }
-}
-
-//  查询蜂鸣器当前是否正在播放提示音 / Check whether a tone is currently playing
-bool PassiveBuzzer::isPlaying() const {
-  return playing_;
-}
-
-//  查询蜂鸣器是否处于静音状态 / Check whether the buzzer is muted
-bool PassiveBuzzer::isMuted() const {
-  return muted_;
-}
-
 //  返回最近一次蜂鸣器错误码 / Return the most recent buzzer error code
 BuzzerError PassiveBuzzer::lastError() const {
   return lastError_;
@@ -125,10 +97,7 @@ bool PassiveBuzzer::applyTone(uint32_t frequencyHz, uint8_t dutyPercent) {
     return fail(BuzzerError::PwmSetupFailed);
   }
 
-  //  静音时保持占空比为 0，但仍保留播放计时 / Keep duty at zero while muted, but preserve playback timing
-  const uint32_t duty = muted_
-                            ? 0U
-                            : (kPwmMaxDuty * dutyPercent) / 100U;
+  const uint32_t duty = (kPwmMaxDuty * dutyPercent) / 100U;
   ledcAttachPin(pin_, channel_);
   ledcWrite(channel_, duty);
   return true;

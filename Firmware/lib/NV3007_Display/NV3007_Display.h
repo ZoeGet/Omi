@@ -63,10 +63,6 @@ class Display {
   void drawRect(int16_t x, int16_t y, int16_t width, int16_t height,
                 uint16_t color);
 
-  //  填充圆角矩形 / Fill a rounded rectangle
-  void fillRoundRect(int16_t x, int16_t y, int16_t width, int16_t height,
-                     int16_t radius, uint16_t color);
-
   //  绘制圆角矩形边框 / Draw a rounded rectangle outline
   void drawRoundRect(int16_t x, int16_t y, int16_t width, int16_t height,
                      int16_t radius, uint16_t color,

@@ -74,16 +74,6 @@ bool VoiceController::notifyCommandCompleted() {
   return true;
 }
 
-//  取消当前语音交互并回到待机 / Cancel the current voice interaction and return to idle
-void VoiceController::cancel() {
-  if (!initialized_ || state_ == VoiceState::Idle) {
-    return;
-  }
-
-  Serial.println("[VOICE] interaction cancelled");
-  enterIdle();
-}
-
 //  返回当前语音交互状态 / Return the current voice interaction state
 VoiceState VoiceController::state() const {
   return state_;

@@ -37,15 +37,6 @@ class PassiveBuzzer {
   //  更新非阻塞播放状态，应在主循环中周期调用 / Update non-blocking playback state; call periodically from the main loop
   void update();
 
-  //  设置静音状态，不改变播放计时 / Set mute state without changing playback timing
-  void setMute(bool muted);
-
-  //  查询是否正在播放 / Check whether a tone is playing
-  bool isPlaying() const;
-
-  //  查询当前是否静音 / Check whether the driver is muted
-  bool isMuted() const;
-
   //  获取最近一次错误 / Get the most recent error
   BuzzerError lastError() const;
 
@@ -60,12 +51,9 @@ class PassiveBuzzer {
   uint8_t channel_ = kBuzzerPwmChannel;
   uint32_t startedAtMs_ = 0;
   uint32_t durationMs_ = 0;
-  uint32_t frequencyHz_ = kBuzzerDefaultFrequencyHz;
-  uint8_t dutyPercent_ = kBuzzerDefaultDutyPercent;
   BuzzerError lastError_ = BuzzerError::None;
   bool initialized_ = false;
   bool playing_ = false;
-  bool muted_ = false;
 };
 
 extern PassiveBuzzer buzzer;

@@ -42,9 +42,6 @@ class VoiceController {
   //  通知状态机命令处理完成 / Notify the state machine that command processing is complete
   bool notifyCommandCompleted();
 
-  //  取消当前语音交互 / Cancel the current voice interaction
-  void cancel();
-
   //  获取当前语音交互状态 / Get the current voice interaction state
   VoiceState state() const;
 

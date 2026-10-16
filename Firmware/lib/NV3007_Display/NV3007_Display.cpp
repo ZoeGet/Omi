@@ -483,37 +483,6 @@ void Display::drawRect(int16_t x, int16_t y, int16_t width, int16_t height,
   drawFastVLine(x + width - 1, y, height, color);
 }
 
-//  按扫描线填充圆角矩形 / Fill a rounded rectangle using scanlines
-void Display::fillRoundRect(int16_t x, int16_t y, int16_t width,
-                            int16_t height, int16_t radius,
-                            uint16_t color) {
-  if (width <= 0 || height <= 0) return;
-  const int16_t maxRadius = (width < height ? width : height) / 2;
-  if (radius < 0) radius = 0;
-  if (radius > maxRadius) radius = maxRadius;
-  if (radius == 0) {
-    fillRect(x, y, width, height, color);
-    return;
-  }
-
-  for (int16_t row = 0; row < height; ++row) {
-    const int16_t edgeDistance = row < radius ? row : height - row - 1;
-    int16_t inset = 0;
-    if (edgeDistance < radius) {
-      const int32_t radiusSquared = static_cast<int32_t>(radius) * radius;
-      const int32_t vertical = radius - edgeDistance;
-      while (inset < radius) {
-        const int32_t horizontal = radius - inset;
-        if (horizontal * horizontal + vertical * vertical <= radiusSquared) {
-          break;
-        }
-        ++inset;
-      }
-    }
-    drawFastHLine(x + inset, y + row, width - inset * 2, color);
-  }
-}
-
 //  绘制圆角矩形边缘 / Draw the perimeter of a rounded rectangle
 void Display::drawRoundRect(int16_t x, int16_t y, int16_t width,
                             int16_t height, int16_t radius,

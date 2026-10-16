@@ -36,8 +36,6 @@ class MultiNetCommandRecognizer {
   void reset();
   //  查询识别器是否已完成初始化 / Check whether the recognizer is initialized
   bool available() const;
-  //  获取 AFE 要求的输入帧采样数 / Get the input frame size required by AFE
-  size_t frameSamples() const;
 
  private:
   void* modelList_ = nullptr;
