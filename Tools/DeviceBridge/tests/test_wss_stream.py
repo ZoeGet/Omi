@@ -11,6 +11,7 @@ from protocol import Limits, ProtocolError
 from simulator import DeviceSimulator
 from usb_client import UsbClient
 from wss_stream import WssStream
+from wireless_pairing import PairingSocket
 
 
 class WssStreamTests(unittest.TestCase):
@@ -35,6 +36,7 @@ class WssStreamTests(unittest.TestCase):
             return frame
         self.wire.ws.send.side_effect = send
         self.wire.ws.recv_frame.side_effect = receive
+        self.wire.receive_text.side_effect = lambda timeout: PairingSocket.receive_text(self.wire, timeout)
         self.store = Mock()
         self.store.load.return_value = (b'k' * 32, b'p' * 32, True)
         self.factory = Mock(return_value=self.wire)
@@ -75,6 +77,24 @@ class WssStreamTests(unittest.TestCase):
     def test_invalid_or_closed_socket_cannot_become_a_protocol_reply(self):
         self.stream.open()
         self.frames.append(SimpleNamespace(opcode=1, data=b'{"v":1,"v":1}'))
+        with self.assertRaisesRegex(ProtocolError, 'wireless-receive-failed'):
+            self.stream.read(1)
+        self.assertFalse(self.stream.is_open)
+
+    def test_ping_pong_and_deadline_are_shared_without_extending_read(self):
+        self.stream.open()
+        self.frames.extend([SimpleNamespace(opcode=9, data=b'ping'), SimpleNamespace(opcode=10, data=b'pong')])
+        self.client.connect()
+        self.wire.ws.pong.assert_called_once_with(b'ping')
+        from unittest.mock import patch
+        self.frames.append(SimpleNamespace(opcode=9, data=b'ping'))
+        with patch('wireless_pairing.time.monotonic', side_effect=[0, 0, self.stream.timeout]):
+            self.assertEqual(self.stream.read(1), b'')
+        self.assertTrue(self.stream.is_open)
+
+    def test_close_frame_fails_closed(self):
+        self.stream.open()
+        self.frames.append(SimpleNamespace(opcode=8, data=b''))
         with self.assertRaisesRegex(ProtocolError, 'wireless-receive-failed'):
             self.stream.read(1)
         self.assertFalse(self.stream.is_open)

@@ -6,11 +6,12 @@ import tempfile
 import unittest
 import configparser
 import subprocess
+from unittest.mock import Mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pake import Pake
 from pairing_auth import derive_daily_key
-from wireless_pairing import PairingStore, BoundedFrames, b64, unb64, confirmation, transcript, pair_device, verify_device, endpoint
+from wireless_pairing import PairingSocket, PairingStore, BoundedFrames, b64, unb64, confirmation, transcript, pair_device, verify_device, endpoint
 
 
 class Device:
@@ -161,6 +162,17 @@ class WirelessPairingTests(unittest.TestCase):
         for value in ("ws://192.0.2.1", "wss://user:pass@192.0.2.1", "wss://192.0.2.1/other", "wss://192.0.2.1/?code=123456"):
             with self.assertRaises(ValueError): endpoint(value)
         self.assertEqual(endpoint(self.address), "wss://192.0.2.1:8443/pair")
+
+    def test_pairing_json_validation_remains_strict_after_shared_frame_read(self):
+        wire = PairingSocket.__new__(PairingSocket)
+        wire.receive_text = Mock(return_value=b'{"v":1,"type":"status","paired":false}')
+        self.assertFalse(wire.receive('status', {'paired'})['paired'])
+        wire.receive_text.assert_called_once_with(10)
+        for raw in (b'{"v":1,"v":1,"type":"status","paired":false}',
+                    b'{"v":true,"type":"status","paired":false}',
+                    b'{"v":1,"type":"status","paired":false,"extra":0}'):
+            wire.receive_text.return_value = raw
+            with self.assertRaises(ValueError): wire.receive('status', {'paired'})
 
     def test_experiment_configuration_survives_disposable_build_directory(self):
         repository = Path(__file__).resolve().parents[3]

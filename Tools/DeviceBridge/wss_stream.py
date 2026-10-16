@@ -1,4 +1,3 @@
-import time
 import websocket
 
 from protocol import ProtocolError, PREFIX, Limits, decode
@@ -62,23 +61,11 @@ class WssStream:
     def read(self, size):
         if not self.wire:
             raise ProtocolError("wireless-disconnected")
-        deadline = time.monotonic() + self.timeout
-        while not self.buffer:
-            remaining = deadline - time.monotonic()
-            if remaining <= 0:
-                return b""
+        if not self.buffer:
             try:
-                self.wire.ws.settimeout(remaining)
-                frame = self.wire.ws.recv_frame()
-                if frame.opcode == websocket.ABNF.OPCODE_PING:
-                    self.wire.ws.pong(frame.data)
-                    continue
-                if frame.opcode == websocket.ABNF.OPCODE_PONG:
-                    continue
-                if frame.opcode != websocket.ABNF.OPCODE_TEXT:
-                    raise ProtocolError("wireless-disconnected")
-                decode(frame.data, Limits(4096, 16))
-                self.buffer.extend(PREFIX + frame.data + b"\n")
+                data = self.wire.receive_text(self.timeout)
+                decode(data, Limits(4096, 16))
+                self.buffer.extend(PREFIX + data + b"\n")
             except websocket.WebSocketTimeoutException:
                 return b""
             except Exception:

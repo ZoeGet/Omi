@@ -97,10 +97,10 @@ class PairingSocket:
             raise ValueError("无线请求过大")
         self.ws.send(text)
 
-    def receive(self, kind, fields):
-        deadline = time.monotonic() + 10
-        while time.monotonic() < deadline:
-            self.ws.settimeout(max(0.001, deadline - time.monotonic()))
+    def receive_text(self, timeout):
+        deadline = time.monotonic() + timeout
+        while (remaining := deadline - time.monotonic()) > 0:
+            self.ws.settimeout(remaining)
             frame = self.ws.recv_frame()
             if frame.opcode == websocket.ABNF.OPCODE_PING:
                 self.ws.pong(frame.data)
@@ -109,13 +109,16 @@ class PairingSocket:
                 continue
             if frame.opcode != websocket.ABNF.OPCODE_TEXT:
                 raise ConnectionError("设备结束了配对连接")
-            data = json.loads(frame.data.decode("utf-8"), object_pairs_hook=unique_object,
-                              parse_constant=invalid_constant)
-            if (not isinstance(data, dict) or set(data) != {"v", "type"} | fields
-                    or type(data["v"]) is not int or data["v"] != 1 or data["type"] != kind):
-                raise ValueError("设备配对响应无效")
-            return data
-        raise TimeoutError("配对步骤超时")
+            return frame.data
+        raise websocket.WebSocketTimeoutException("无线接收超时")
+
+    def receive(self, kind, fields):
+        data = json.loads(self.receive_text(10).decode("utf-8"), object_pairs_hook=unique_object,
+                          parse_constant=invalid_constant)
+        if (not isinstance(data, dict) or set(data) != {"v", "type"} | fields
+                or type(data["v"]) is not int or data["v"] != 1 or data["type"] != kind):
+            raise ValueError("设备配对响应无效")
+        return data
 
     def authenticate(self, key):
         self.send("challenge")
