@@ -368,9 +368,9 @@ void updateMicrophoneDiagnostic() {
 //  AFE 始终接收音频，allowDetection 只控制 MultiNet 是否实际判定 / AFE always receives audio; allowDetection only gates MultiNet decisions
 void updateCommandAudioFrames() {
   size_t processedFrameCount = 0;
-  while (gCommandAudioBuffer.popFrame(
-             gCommandPcmFrame, OmiPetAudio::kPcmAudioFrameSamples) &&
-         processedFrameCount < kMaxCommandFramesPerLoop) {
+  while (processedFrameCount < kMaxCommandFramesPerLoop &&
+         gCommandAudioBuffer.popFrame(
+             gCommandPcmFrame, OmiPetAudio::kPcmAudioFrameSamples)) {
     ++processedFrameCount;
     const uint32_t nowMs = millis();
     //  AFE 持续运行，但只有语音活动或尾窗内才调用 MultiNet 推理 / Keep AFE running continuously, but invoke MultiNet only during speech or hangover

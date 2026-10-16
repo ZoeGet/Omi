@@ -76,6 +76,13 @@ def main():
         run(check + usb_flags + ["-UOMIPET_PROTOCOL_WRITE_WAIT_MS", "-DOMIPET_PROTOCOL_WRITE_WAIT_MS=0"],
             source='#include "protocol_experiment_config.h"\n', success=False)
         sanitizer = ["-fsanitize=address,undefined", "-fno-omit-frame-pointer", "-g"]
+        main_source = (repository / "Firmware/src/main.cpp").read_text(encoding="utf-8")
+        loop_start = main_source.index("while (", main_source.index("void updateCommandAudioFrames()"))
+        loop_end = main_source.index(" {", loop_start)
+        (output / "audio_budget_loop.h").write_text(main_source[loop_start:loop_end] + "\n", encoding="utf-8")
+        run(["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror", *sanitizer,
+             "-I" + path(output), path(native / "audio_budget_native.cpp"), "-o", path(output / "audio_budget_native")])
+        audio_result = run([path(output / "audio_budget_native")])
         run(["gcc", "-std=c99", *sanitizer, "-I" + path(cjson), "-c", path(cjson / "cJSON.c"),
              "-o", path(output / "cjson.o")])
         run(["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror", *sanitizer, *fixture_flags,
@@ -183,6 +190,7 @@ void tick(bool sof) { USB_SERIAL_JTAG.int_raw.sof_int_raw = sof ? 1 : 0; usb_ser
         print(monitor_policy_result.stdout, end="")
         print(arbiter_result.stdout, end="")
         print(effect_result.stdout, end="")
+        print(audio_result.stdout, end="")
         print(pairing_result.stdout, end="")
         print(monitor_transport_result.stdout, end="")
         report = dict(result="pass", configChecks=19,
@@ -194,6 +202,7 @@ void tick(bool sof) { USB_SERIAL_JTAG.int_raw.sof_int_raw = sof ? 1 : 0; usb_ser
                       monitorPolicyTests=[line[5:] for line in monitor_policy_result.stdout.splitlines() if line.startswith("PASS ")],
                       arbiterTests=[line[5:] for line in arbiter_result.stdout.splitlines() if line.startswith("PASS ")],
                       effectTests=[line[5:] for line in effect_result.stdout.splitlines() if line.startswith("PASS ")],
+                      audioBudgetTests=[line[5:] for line in audio_result.stdout.splitlines() if line.startswith("PASS ")],
                       pairingWindowTests=[line[5:] for line in pairing_result.stdout.splitlines() if line.startswith("PASS ")],
                       monitorTransportTests=[line[5:] for line in monitor_transport_result.stdout.splitlines() if line.startswith("PASS ")],
                       sofTests=sof_tests,
