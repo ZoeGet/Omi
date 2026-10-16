@@ -6,8 +6,9 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[2]
 BLOCKED_PARTS = {"tmp", ".pio", ".venv", "venv", "env", "__pycache__", "build", "dist", "release"}
-BLOCKED_SUFFIXES = {".exe", ".zip", ".bin", ".elf", ".map", ".log", ".pem", ".key", ".p12", ".pfx", ".pyc"}
-BLOCKED_NAMES = {"AGENTS.md", "auth.json", "hooks.json", "snapshot.json", "events.jsonl", "host-binding-config.json"}
+BLOCKED_SUFFIXES = {".exe", ".zip", ".bin", ".elf", ".map", ".log", ".pem", ".key", ".p12", ".pfx", ".pyc",
+                    ".dll", ".sqlite3", ".sqlite3-journal", ".sqlite3-wal", ".sqlite3-shm"}
+BLOCKED_NAMES = {"AGENTS.md", "auth.json", "hooks.json", "snapshot.json", "events.jsonl", "host-binding-config.json", "compile_commands.json"}
 PATTERNS = {
     "API token": re.compile(rb"\bsk-[A-Za-z0-9_-]{20,}"),
     "GitHub token": re.compile(rb"\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,})"),

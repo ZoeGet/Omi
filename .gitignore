@@ -52,6 +52,11 @@ env/
 *.key
 *.p12
 *.pfx
+*.sqlite3
+*.sqlite3-journal
+*.sqlite3-wal
+*.sqlite3-shm
+*.dll
 
 #  已审计的凭证处理源码与测试，不包含生成凭证 / Audited credential-handling source and tests, never generated credentials
 !Firmware/include/pairing_credential_record.h
@@ -117,6 +122,7 @@ Firmware/managed_components/
 Firmware/sdkconfig
 Firmware/target/
 Firmware/include/generated_multinet_commands.h
+Firmware/compile_commands.json
 
 # ESP-IDF generated machine-specific configuration
 Firmware/sdkconfig.*

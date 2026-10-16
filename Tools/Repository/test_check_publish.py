@@ -6,7 +6,9 @@ from check_publish import findings
 class PublicationTests(unittest.TestCase):
     def test_runtime_material_and_build_output_are_blocked(self):
         for path in ("tmp/report.json", "Tools/Desktop/dist/OmiPet.exe", "auth.json", "private.key",
-                     "events.jsonl", "host-bindings.json", "AGENTS.md", "device_credentials.json"):
+                     "events.jsonl", "host-bindings.json", "AGENTS.md", "device_credentials.json",
+                     "pairing.sqlite3", "pairing.sqlite3-wal", "pairing.sqlite3-shm", "pairing.sqlite3-journal",
+                     "omi_pake.dll", "Firmware/compile_commands.json"):
             self.assertIn("local-only path", list(findings(path, b"")), path)
 
     def test_reviewed_source_and_fake_vectors_are_publishable(self):
