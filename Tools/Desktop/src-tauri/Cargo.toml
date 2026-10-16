@@ -1,0 +1,14 @@
+[package]
+name = "omipet-ui-pilot"
+version = "0.2.0"
+description = "OmiPet Windows device control"
+edition = "2021"
+publish = false
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+serde_json = "1"

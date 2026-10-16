@@ -77,6 +77,12 @@ release/
 /Tools/Desktop/**/*.zip
 /Tools/Desktop/**/*.spec
 
+#  统一上位机的前端依赖与原生构建缓存 / Frontend dependencies and native build caches for the unified desktop app
+/Tools/Desktop/node_modules/
+/Tools/Desktop/src-tauri/target/
+/Tools/Desktop/src-tauri/gen/
+/Tools/Desktop/coverage/
+
 # Local agent handoff instructions
 AGENTS.md
 
