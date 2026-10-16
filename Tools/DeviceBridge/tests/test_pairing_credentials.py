@@ -1,13 +1,10 @@
 import hashlib
 from pathlib import Path
 import sys
-import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from pairing_credentials import (
-    CredentialState, decode_record, encode_record, load_file, save_file_once,
-)
+from pairing_credentials import decode_record, encode_record
 
 
 class PairingCredentialTests(unittest.TestCase):
@@ -29,22 +26,6 @@ class PairingCredentialTests(unittest.TestCase):
             decode_record(bytes(damaged))
         with self.assertRaises(ValueError):
             decode_record(record[:-1])
-
-    def test_file_is_write_once_and_corrupt_or_partial_fails_closed(self):
-        with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "identity.bin"
-            self.assertEqual((CredentialState.ABSENT, None), load_file(path))
-            save_file_once(path, self.key, self.pin)
-            self.assertEqual((CredentialState.PRESENT, (self.key, self.pin)),
-                             load_file(path))
-            with self.assertRaises(FileExistsError):
-                save_file_once(path, b"z" * 32, self.pin)
-            self.assertEqual((CredentialState.PRESENT, (self.key, self.pin)),
-                             load_file(path))
-            path.write_bytes(b"partial")
-            self.assertEqual((CredentialState.UNKNOWN, None), load_file(path))
-            with self.assertRaises(FileExistsError):
-                save_file_once(path, self.key, self.pin)
 
     def test_zero_and_wrong_version_are_invalid(self):
         with self.assertRaises(ValueError):

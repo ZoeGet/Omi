@@ -1,21 +1,11 @@
 import hashlib
 import hmac
-import os
-from pathlib import Path
-import tempfile
-from enum import Enum
 
 
 HEADER = b"OMIC\x01"
 KEY_BYTES = 32
 PIN_BYTES = 32
 RECORD_BYTES = len(HEADER) + KEY_BYTES + PIN_BYTES + 32
-
-
-class CredentialState(Enum):
-    ABSENT = "absent"
-    PRESENT = "present"
-    UNKNOWN = "unknown"
 
 
 def encode_record(daily_key: bytes, cert_pin: bytes) -> bytes:
@@ -38,35 +28,3 @@ def decode_record(record: bytes) -> tuple[bytes, bytes]:
     if not any(key) or not any(pin):
         raise ValueError("credential record contains zero material")
     return key, pin
-
-
-def load_file(path: Path) -> tuple[CredentialState, tuple[bytes, bytes] | None]:
-    path = Path(path)
-    try:
-        with path.open("rb") as file:
-            record = file.read(RECORD_BYTES + 1)
-    except FileNotFoundError:
-        return CredentialState.ABSENT, None
-    except OSError:
-        return CredentialState.UNKNOWN, None
-    try:
-        return CredentialState.PRESENT, decode_record(record)
-    except ValueError:
-        return CredentialState.UNKNOWN, None
-
-
-def save_file_once(path: Path, daily_key: bytes, cert_pin: bytes) -> None:
-    """Publish a complete record without replacing an existing credential."""
-    path = Path(path)
-    record = encode_record(daily_key, cert_pin)
-    descriptor, temporary = tempfile.mkstemp(prefix=".omipet-pair-", dir=path.parent)
-    try:
-        with os.fdopen(descriptor, "wb") as file:
-            if hasattr(os, "fchmod"):
-                os.fchmod(file.fileno(), 0o600)
-            file.write(record)
-            file.flush()
-            os.fsync(file.fileno())
-        os.link(temporary, path)
-    finally:
-        os.unlink(temporary)
