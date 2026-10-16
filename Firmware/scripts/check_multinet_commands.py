@@ -68,44 +68,12 @@ def parse_config_file(config_header: Path) -> list[tuple[int, str]]:
 
 
 def sync_command_file(commands: list[tuple[int, str]], command_file: Path) -> None:
+    command_file.parent.mkdir(parents=True, exist_ok=True)
     command_file.write_text(
         "".join(f"{command_id} {phrase}\n" for command_id, phrase in commands),
         encoding="utf-8",
         newline="\n",
     )
-
-
-def parse_command_file(command_file: Path) -> list[tuple[int, str]]:
-    commands: list[tuple[int, str]] = []
-    for line_number, raw_line in enumerate(
-        command_file.read_text(encoding="utf-8").splitlines(), start=1
-    ):
-        line = raw_line.strip()
-        if not line:
-            continue
-        fields = line.split(maxsplit=1)
-        if len(fields) != 2 or not fields[0].isdigit():
-            raise ValueError(
-                f"{command_file}:{line_number}: expected '<id> <pinyin phrase>'"
-            )
-        command_id = int(fields[0])
-        phrase = fields[1].strip()
-        if command_id <= 0:
-            raise ValueError(f"{command_file}:{line_number}: command id must be positive")
-        if not phrase:
-            raise ValueError(f"{command_file}:{line_number}: empty phrase")
-        if not re.fullmatch(r"[a-z]+(?:\s+[a-z]+)*", phrase):
-            raise ValueError(
-                f"{command_file}:{line_number}: phrase must use lowercase pinyin words"
-            )
-        if len(phrase) > MAX_PHONEME_LENGTH:
-            raise ValueError(
-                f"{command_file}:{line_number}: phrase exceeds {MAX_PHONEME_LENGTH} characters"
-            )
-        commands.append((command_id, phrase))
-
-    validate_command_entries(commands, command_file)
-    return commands
 
 
 def validate_command_entries(
@@ -174,8 +142,7 @@ def parse_runtime_ids(runtime_header: Path) -> dict[str, int]:
     return result
 
 
-def validate_commands(command_file: Path, runtime_header: Path) -> list[tuple[int, str]]:
-    commands = parse_command_file(command_file)
+def validate_runtime_ids(runtime_header: Path) -> None:
     runtime_ids = parse_runtime_ids(runtime_header)
     if runtime_ids != EXPECTED_COMMAND_IDS:
         raise ValueError(
@@ -184,7 +151,6 @@ def validate_commands(command_file: Path, runtime_header: Path) -> list[tuple[in
         )
     if len(set(runtime_ids.values())) != len(runtime_ids):
         raise ValueError(f"{runtime_header}: command ids must be unique")
-    return commands
 
 
 def write_generated_header(
@@ -230,10 +196,10 @@ def check_and_generate(
     runtime_header: Path,
     generated_header: Path,
 ) -> None:
-    configured_commands = parse_config_file(config_header)
-    validate_command_entries(configured_commands, config_header)
-    sync_command_file(configured_commands, command_file)
-    commands = validate_commands(command_file, runtime_header)
+    commands = parse_config_file(config_header)
+    validate_command_entries(commands, config_header)
+    validate_runtime_ids(runtime_header)
+    sync_command_file(commands, command_file)
     generated_header.parent.mkdir(parents=True, exist_ok=True)
     write_generated_header(commands, generated_header)
     wake_phrase = next(phrase for command_id, phrase in commands if command_id == 1)
@@ -247,7 +213,7 @@ if __name__ == "__main__":
     project_dir = Path(__file__).resolve().parents[1]
     check_and_generate(
         project_dir / "include" / "voice_command_config.h",
-        project_dir / "scripts" / "multinet_commands_cn.txt",
+        project_dir / ".pio" / "generated" / "multinet_commands_cn.txt",
         project_dir / "include" / "multinet_command_recognizer.h",
         project_dir / "include" / "generated_multinet_commands.h",
     )

@@ -149,7 +149,7 @@ I²S、PCM 队列和 AFE 会持续运行，但 MultiNet 只在检测到语音活
 1 lao shu fei fei
 ```
 
-个人配置位于 `Firmware/include/voice_command_config.h`。构建前，`Firmware/scripts/generate_model.py` 会先解析这个文件，将全部命令同步到 `Firmware/scripts/multinet_commands_cn.txt`，再把词表复制到 `target/fst/commands_cn.txt`，生成并加入 PlatformIO 的 `model` 分区镜像。运行时，`Firmware/src/multinet_command_recognizer.cpp` 会通过 ESP-SR 的命令词 API 注册同一组拼音和命令 ID，因此应用固件与模型使用同一份配置。
+个人配置位于 `Firmware/include/voice_command_config.h`。构建前，`Firmware/scripts/generate_model.py` 会先解析这个文件，将全部命令生成到当前构建目录的 `multinet_commands_cn.txt`，再把词表复制到 `target/fst/commands_cn.txt`，生成并加入 PlatformIO 的 `model` 分区镜像。运行时，`Firmware/src/multinet_command_recognizer.cpp` 会通过 ESP-SR 的命令词 API 注册同一组拼音和命令 ID，因此应用固件与模型使用同一份配置。
 
 识别到命令 ID `1` 后，主循环将它解释为自定义唤醒入口：
 
@@ -159,7 +159,7 @@ I²S、PCM 队列和 AFE 会持续运行，但 MultiNet 只在检测到语音活
 4. 在超时时间内等待 ID `2` 或 ID `3`；
 5. 按 ID `2/3` 将亮度增加或降低 `16/255`，然后回到持续监听。
 
-命令词的唯一修改入口是 `Firmware/include/voice_command_config.h`。修改或新增数组项即可维护唤醒词、同义表达和后续命令；不要直接修改同步后的 `Firmware/scripts/multinet_commands_cn.txt`，也不要修改自动生成的 `Firmware/include/generated_multinet_commands.h`。构建检查会拒绝空配置、重复短语、非正 ID、非法拼音、超过 MultiNet 长度/数量上限的配置，并确保 ID `1/2/3` 仍然存在且 ID `1` 只有一条。
+命令词的唯一修改入口是 `Firmware/include/voice_command_config.h`。修改或新增数组项即可维护唤醒词、同义表达和后续命令；不要直接修改构建目录内的 `multinet_commands_cn.txt`，也不要修改自动生成的 `Firmware/include/generated_multinet_commands.h`。构建检查会拒绝空配置、重复短语、非正 ID、非法拼音、超过 MultiNet 长度/数量上限的配置，并确保 ID `1/2/3` 仍然存在且 ID `1` 只有一条。
 
 更换或新增步骤：编辑 `Firmware/include/voice_command_config.h` → 修改/增加 `{命令ID, "无声调拼音"}` → 重新构建 → PlatformIO 自动同步词表、生成运行时表并把 `model.bin` 加入烧录列表 → 将应用固件和模型分区一起烧录 → 查看 `[ASR] continuous experiment wake_id=1 phrase=...` 日志并实测。新增命令词会自动注册，但要让设备执行新的业务动作，还必须在 `Firmware/src/main.cpp` 中为该命令 ID 增加业务分派；配置入口不会凭空生成未实现的业务逻辑。
 
@@ -187,7 +187,7 @@ WakeNet 是专门的唤醒模型，但当前 ESP-SR 模型包中的现成模型�
 - `Firmware/include/voice_command_config.h`：个人语音命令配置入口；集中维护命令 ID 和无声调拼音短语，ID `1` 为唤醒词，ID `2/3` 为亮度，ID `4–16` 为颜色和动效。
 - `Firmware/include/led_controller.h`、`Firmware/src/led_controller.cpp`：分离的 WS2812B 硬件缓存 `Strip` 和非阻塞动画控制器 `EffectController`。
 - `Firmware/scripts/check_multinet_commands.py`：构建前解析个人配置、同步词表、校验命令 ID/重复短语/容量，并生成 `Firmware/include/generated_multinet_commands.h`。
-- `Firmware/scripts/multinet_commands_cn.txt`：由构建流程从个人配置自动同步的 MultiNet 词表，不是推荐的手动编辑入口。
+- 构建目录的 `multinet_commands_cn.txt`：自动生成的模型输入，不纳入版本管理；唯一配置入口仍是 `voice_command_config.h`。
 - `Firmware/scripts/generate_model.py`：将 ESP-SR 模型和项目词表打包成 `model.bin`，并将其加入 PlatformIO 烧录流程。
 
 这些文件共同组成当前语音架构；不能因为没有使用 WakeNet 就删除 `CMakeLists.txt`、`sdkconfig.defaults` 或整个 `esp-sr` 目录。
