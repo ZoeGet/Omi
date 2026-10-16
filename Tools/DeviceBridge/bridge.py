@@ -71,11 +71,11 @@ class Health:
             self.report["maxPollUs"] = max(self.report["maxPollUs"] or 0, int(poll[1]))
         if text.startswith("[PROTO]"):
             counters = dict((key, int(value)) for key, value in re.findall(
-                r"\b(seq|probes|requests|sent|rejected|stalled|stale|write_failures|session_failure|frame_failure|link_losses|reopens|bus_resets|link_down_polls|last_link_down_ms|max_link_down_ms)=(\d+)", text))
+                r"\b(seq|probes|requests|sent|rejected|stalled|stale|write_failures|session_failure|frame_failure|link_losses|filtered_link_gaps|reopens|bus_resets|link_down_polls|last_link_down_ms|max_link_down_ms)=(\d+)", text))
             if counters:
                 previous = self.report.get("lastProtocolCounters")
                 if self.protocol_counter_sink is not None:
-                    keys = ("link_losses", "reopens", "bus_resets", "link_down_polls")
+                    keys = ("link_losses", "filtered_link_gaps", "reopens", "bus_resets", "link_down_polls")
                     delta = ({key: counters[key] - previous[key] for key in keys
                               if key in counters and key in previous}
                              if previous is not None else {})
@@ -250,7 +250,7 @@ class Bridge:
         try:
             host = self.client.host
             if host is None:
-                if not self.report["connections"]:
+                if not self.report["connections"] and not self.report["cycles"]:
                     return
                 self._connect()
             elif host.pending is not None or host.invalidated:

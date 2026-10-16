@@ -83,6 +83,15 @@ class ControllerTests(unittest.TestCase):
         self.assertEqual(self.control.state["displayStatus"], "unknown")
         self.assertEqual(self.control.state["monitorOutput"], "connected")
 
+    def test_monitor_close_recovers_lost_preconnected_host(self):
+        self.control.monitor()
+        self.assertEqual(self.control.bridge.report["connections"], 0)
+        self.client.host = None
+        self.control.close()
+        self.assertFalse(self.control.monitor_requested)
+        self.assertEqual(self.control.state["monitorOutput"], "disconnected")
+        self.assertFalse(self.control.state["leaseActive"])
+
     def test_voice_takeover_exits_desktop_monitor_and_preserves_local_on_close(self):
         self.control.light(setting())
         self.control.monitor()

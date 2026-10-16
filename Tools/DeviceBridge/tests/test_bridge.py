@@ -308,6 +308,17 @@ class BridgeTests(unittest.TestCase):
         bridge.release()
         self.assertTrue(bridge.report["releaseConfirmed"])
 
+    def test_reset_on_preconnected_first_step_still_releases(self):
+        stream, bridge = self.setup_bridge(stream=ResetStream())
+        bridge.client.connect()
+        stream.reset_on_request = True
+        self.assertFalse(bridge.step())
+        self.assertEqual(bridge.report["connections"], 0)
+        self.assertEqual(bridge.report["connectionResets"], 1)
+        bridge.release()
+        self.assertTrue(bridge.report["releaseConfirmed"])
+        self.assertIsNone(stream.device.deadline)
+
     def test_old_firmware_receives_safe_probes_only(self):
         stream, bridge = self.setup_bridge(stream=Stream(legacy=True), retries=0)
         self.assertFalse(bridge.step())
@@ -320,6 +331,14 @@ class BridgeTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             bridge.run(duration_seconds=1)
         self.assertTrue(bridge.report["releaseConfirmed"])
+
+    def test_filtered_link_gaps_are_recorded_separately_from_disconnects(self):
+        samples = []
+        health = Health(4096, protocol_counter_sink=samples.append)
+        health.line("[PROTO] link_losses=1 filtered_link_gaps=4")
+        health.line("[PROTO] link_losses=1 filtered_link_gaps=5")
+        self.assertEqual(samples[-1]["delta"], dict(link_losses=0, filtered_link_gaps=1))
+        self.assertEqual(health.report["lastProtocolCounters"]["filtered_link_gaps"], 5)
 
     def test_health_is_bounded_and_does_not_keep_raw_log(self):
         health = Health(4096)
