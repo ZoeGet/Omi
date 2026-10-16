@@ -14,6 +14,7 @@
 #include "omi_pet_ui.h"
 #include "time_service.h"
 #include "wifi_manager.h"
+#include "wireless_pairing.h"
 
 //  OmiPet 固件主循环和模块编排 / OmiPet firmware entry point and module orchestration
 #include "ics43434_mic.h"
@@ -665,6 +666,9 @@ void loop() {
 #endif
   //  处理 WiFiManager 网页配网和连接状态 / Process WiFiManager provisioning and connection state
   OmiPetNetwork::wifi.update();
+#if OMIPET_WIFI_PAIRING
+  OmiPetPairing::updateWirelessPairing(OmiPetNetwork::wifi.connected());
+#endif
   refreshNetworkAndTimeUi();
   //  先推进灯效，避免语音识别处理占用主循环时延后动画刷新 / Advance effects first so speech processing delays animation refresh less
 #if OMIPET_MONITOR_LIGHTS

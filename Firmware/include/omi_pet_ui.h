@@ -22,7 +22,7 @@ void setDateTime(bool valid, int year, int month, int day, int hour, int minute)
 void setVoiceStatus(const char* statusText);
 
 //  绘制或清除六位配对码；仅负责显示，不开启网络配对 / Show or clear a six-digit pairing code; display only, without enabling network pairing
-void setPairingCode(const char* sixDigits, uint16_t secondsRemaining);
+void setPairingCode(const char* sixDigits, uint16_t secondsRemaining, const char* address = nullptr);
 
 //  按秒更新时钟 / Update the clock once per second
 void update();

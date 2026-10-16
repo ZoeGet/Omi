@@ -18,8 +18,16 @@ set(OMIPET_SOURCES
     "../lib/NV3007_Display/NV3007_Display.cpp"
 )
 
+if(OMIPET_WIFI_PAIRING)
+    list(APPEND OMIPET_SOURCES "wireless_pairing.cpp" "pairing_tls_identity.cpp"
+        "pairing_tls_store.cpp" "pairing_nvs_store.cpp")
+endif()
+
 idf_component_register(
     SRCS ${OMIPET_SOURCES}
     INCLUDE_DIRS "../include" "../lib/NV3007_Display"
-    REQUIRES esp-sr json
+    REQUIRES esp-sr json esp_http_server mbedtls nvs_flash
 )
+if(OMIPET_WIFI_PAIRING)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE OMIPET_WIFI_PAIRING=1)
+endif()

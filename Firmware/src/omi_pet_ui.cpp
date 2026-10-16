@@ -95,6 +95,7 @@ bool gDateTimeRendered = false;
 bool gPairingCountdownRendered = false;
 bool gPairingVisible = false;
 char gPairingCode[7] = {};
+char gPairingAddress[16] = {};
 uint16_t gPairingSecondsRemaining = 0;
 bool gDateTimeValid = false;
 int gDateTimeYear = 0;
@@ -257,7 +258,7 @@ void drawPairingCard() {
   drawCenteredTextInArea(kCenterCardLeft, kCenterCardWidth, 51,
                          gPairingCode, 4, kWhite);
   drawCenteredTextInArea(kCenterCardLeft, kCenterCardWidth, 91,
-                         "EXPIRES", 1, kYellow);
+                         gPairingAddress[0] ? gPairingAddress : "EXPIRES", 1, kYellow);
   gPairingCountdownRendered = false;
   drawPairingCountdown();
 }
@@ -526,7 +527,7 @@ void setVoiceStatus(const char* statusText) {
 }
 
 //  只接受恰好六位数字；清除后恢复原时钟和日期 / Accept exactly six decimal digits; restore the clock and date when cleared
-void setPairingCode(const char* sixDigits, uint16_t secondsRemaining) {
+void setPairingCode(const char* sixDigits, uint16_t secondsRemaining, const char* address) {
   bool valid = sixDigits != nullptr && secondsRemaining > 0U &&
                secondsRemaining <= 300U && std::strlen(sixDigits) == 6U;
   if (valid) {
@@ -555,12 +556,15 @@ void setPairingCode(const char* sixDigits, uint16_t secondsRemaining) {
     return;
   }
 
-  const bool codeChanged = !gPairingVisible ||
+  char nextAddress[sizeof(gPairingAddress)] = {};
+  if (address) std::strncpy(nextAddress, address, sizeof(nextAddress) - 1);
+  const bool codeChanged = !gPairingVisible || std::strcmp(gPairingAddress, nextAddress) != 0 ||
                            std::strcmp(gPairingCode, sixDigits) != 0;
   if (!codeChanged && gPairingSecondsRemaining == secondsRemaining) return;
   gPairingVisible = true;
   gPairingSecondsRemaining = secondsRemaining;
   if (codeChanged) {
+    std::memcpy(gPairingAddress, nextAddress, sizeof(gPairingAddress));
     std::memcpy(gPairingCode, sixDigits, sizeof(gPairingCode));
     if (gUiStarted) drawPairingCard();
   } else if (gUiStarted) {

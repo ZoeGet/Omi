@@ -18,6 +18,7 @@ if __name__ == "__main__":
     parser.add_argument("--rx-bytes-per-loop", type=positive, required=True)
     parser.add_argument("--max-json-depth", type=positive, required=True)
     parser.add_argument("--usb", action="store_true")
+    parser.add_argument("--wireless-pairing", action="store_true")
     parser.add_argument("--sof-reset-fix", action="store_true")
     parser.add_argument("--freshness-challenge", action="store_true")
     parser.add_argument("--monitor-lights", action="store_true")
@@ -80,6 +81,20 @@ if __name__ == "__main__":
     config["env:esp32-s3-devkitc-1"]["build_flags"] = flags
     if args.sof_reset_fix:
         config["env:esp32-s3-devkitc-1"]["board_build.cmake_extra_args"] = "-DOMIPET_USB_SOF_FIX=ON"
+    if args.wireless_pairing:
+        if output.is_relative_to(build):
+            parser.error("Keep wireless configuration files outside the disposable build directory")
+        settings = config["env:esp32-s3-devkitc-1"]
+        settings["board_build.cmake_extra_args"] = settings.get("board_build.cmake_extra_args", "") + " -DOMIPET_WIFI_PAIRING=ON"
+        sdkconfig = output.with_suffix(".sdkconfig")
+        defaults = output.with_suffix(".defaults")
+        if sdkconfig.exists() or defaults.exists():
+            parser.error("Choose unused isolated configuration paths")
+        sdkconfig.parent.mkdir(parents=True, exist_ok=True)
+        defaults.write_text((firmware / "sdkconfig.defaults").read_text(encoding="utf-8") +
+                            "\nCONFIG_HTTPD_WS_SUPPORT=y\nCONFIG_MBEDTLS_ECJPAKE_C=y\nCONFIG_MBEDTLS_HKDF_C=y\n", encoding="utf-8")
+        settings["board_build.cmake_extra_args"] += ' -DSDKCONFIG_DEFAULTS="' + defaults.as_posix() + '"'
+        settings["board_build.esp-idf.sdkconfig_path"] = sdkconfig.as_posix()
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("x", encoding="utf-8") as stream:
         config.write(stream)
