@@ -145,6 +145,9 @@ int main() {
           StoredIdentityState::Unknown ||
       classifyStoredIdentity(CredentialLoadState::Present,
                               TlsIdentityReadState::Verified, false) !=
+          StoredIdentityState::Unknown ||
+      classifyStoredIdentity(CredentialLoadState::Unknown,
+                              TlsIdentityReadState::Verified, true) !=
           StoredIdentityState::Unknown) return 1;
   std::cout << "PASS verified_tls_without_host_can_pair_but_damage_blocks_boot\n";
 }

@@ -22,6 +22,7 @@
 #include "pairing_auth_gate.h"
 #include "pairing_nvs_store.h"
 #include "pairing_tls_store.h"
+#include "pairing_identity_state.h"
 
 #if !CONFIG_HTTPD_WS_SUPPORT || !CONFIG_MBEDTLS_ECJPAKE_C || !CONFIG_MBEDTLS_HKDF_C
 #error "Wireless pairing requires the isolated WebSocket, ECJPAKE and HKDF configuration"
@@ -325,18 +326,16 @@ esp_err_t websocketHandler(httpd_req_t* req) {
 bool startService() {
   uint8_t storedPin[32];
   auto credential = loadPairingCredential(dailyKey, storedPin);
-  if (credential == CredentialLoadState::Unknown) return false;
   size_t certSize = 0, keySize = 0;
   auto identity = loadTlsIdentity(certificate, sizeof(certificate), &certSize, privateKey, sizeof(privateKey), &keySize, pin);
+  const auto stored = classifyStoredIdentity(credential, identity, fixedTimeEqual(pin, storedPin, 32));
+  if (stored == StoredIdentityState::Unknown) return false;
   if (identity == TlsIdentityReadState::Absent) {
-    if (credential != CredentialLoadState::Absent) return false;
     if (!generateTlsIdentity(randomBytes, nullptr, "20260101000000", "20500101000000", certificate,
         sizeof(certificate), &certSize, privateKey, sizeof(privateKey), &keySize, pin) ||
         !saveTlsIdentityOnce(certificate, certSize, privateKey, keySize, pin)) return false;
-  } else if (identity != TlsIdentityReadState::Verified) return false;
-  if (credential == CredentialLoadState::Unknown ||
-      (credential == CredentialLoadState::Present && !fixedTimeEqual(pin, storedPin, 32))) return false;
-  paired = credential == CredentialLoadState::Present;
+  }
+  paired = stored == StoredIdentityState::Present;
   mbedtls_x509_crt_init(&tlsCertificate);
   mbedtls_pk_init(&tlsKey);
   mbedtls_ssl_config_init(&tlsConfig);
@@ -364,7 +363,7 @@ bool startService() {
   uri.is_websocket = true;
   if (httpd_register_uri_handler(server, &uri) != ESP_OK) { httpd_stop(server); server = nullptr; return false; }
   Lock lock;
-  boot.onBoot(paired ? StoredIdentityState::Present : StoredIdentityState::Absent);
+  boot.onBoot(stored);
   openedAt = nowMs();
   boot.tryOpen(openedAt, true, true, true, randomWord, nullptr);
   started = true;
