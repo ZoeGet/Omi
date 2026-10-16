@@ -56,7 +56,8 @@ void pollSerialExperiment(void (*debugWake)(), bool localLightAllowed) {
     char boot[33];
     newToken(boot);
     gTransport = new (gTransportStorage) UsbTransport(boot, OMIPET_PROTOCOL_MAX_SESSIONS,
-                                                    OMIPET_PROTOCOL_MAX_JSON_DEPTH, OMIPET_PROTOCOL_LEASE_MS);
+                                                    OMIPET_PROTOCOL_MAX_JSON_DEPTH, OMIPET_PROTOCOL_LEASE_MS,
+                                                    OMIPET_PROTOCOL_LINK_GRACE_MS);
   }
   if (gBusReset.exchange(false)) { ++gBusResets; gTransport->disconnect(); }
   UsbPort port;
@@ -104,14 +105,15 @@ void reportUsbExperiment() {
   if (!gTransport) { Serial.printf("[PROTO] usb=unavailable buffers=%s\n", gBuffersReady ? "ready" : "failed"); return; }
   const SessionView state = gTransport->view();
   const TransportStats& stats = gTransport->stats();
-  Serial.printf("[PROTO] usb=experimental mode=%s display=%s lease=%u seq=%lu probes=%lu requests=%lu sent=%lu rejected=%lu stalled=%lu stale=%lu write_failures=%lu session_failure=%lu frame_failure=%lu link_losses=%lu reopens=%lu bus_resets=%lu link_down_polls=%lu last_link_down_ms=%llu max_link_down_ms=%llu max_poll_us=%llu heap=%u\n",
+  Serial.printf("[PROTO] usb=experimental mode=%s display=%s lease=%u seq=%lu probes=%lu requests=%lu sent=%lu rejected=%lu stalled=%lu stale=%lu write_failures=%lu session_failure=%lu frame_failure=%lu link_losses=%lu filtered_link_gaps=%lu reopens=%lu bus_resets=%lu link_down_polls=%lu last_link_down_ms=%llu max_link_down_ms=%llu max_poll_us=%llu heap=%u\n",
                 state.mode, state.displayStatus, state.leaseActive ? 1U : 0U,
                 static_cast<unsigned long>(state.lastSequence), static_cast<unsigned long>(stats.probes),
                 static_cast<unsigned long>(stats.requests), static_cast<unsigned long>(stats.sent),
                 static_cast<unsigned long>(stats.rejected), static_cast<unsigned long>(stats.stalled),
                 static_cast<unsigned long>(stats.staleReplies), static_cast<unsigned long>(stats.writeFailures),
                 static_cast<unsigned long>(stats.lastSessionFailure), static_cast<unsigned long>(stats.lastFrameFailure),
-                static_cast<unsigned long>(stats.linkLosses), static_cast<unsigned long>(stats.reopens), static_cast<unsigned long>(gBusResets),
+                static_cast<unsigned long>(stats.linkLosses), static_cast<unsigned long>(stats.filteredLinkGaps),
+                static_cast<unsigned long>(stats.reopens), static_cast<unsigned long>(gBusResets),
                 static_cast<unsigned long>(stats.linkDownPolls),
                 static_cast<unsigned long long>(stats.lastLinkDownMs), static_cast<unsigned long long>(stats.maxLinkDownMs),
                 static_cast<unsigned long long>(gMaxPollUs), static_cast<unsigned>(esp_get_free_heap_size()));

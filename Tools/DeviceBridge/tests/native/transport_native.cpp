@@ -32,9 +32,10 @@ struct Port {
   void add(const std::string& text) { for (uint8_t byte : text) input.push_back(byte); }
 };
 struct Fixture {
-  OmiPetProtocol::ProtocolTransport<4096> transport{"11111111111111111111111111111111", 16, 8, 1000};
+  OmiPetProtocol::ProtocolTransport<4096> transport;
   Port port;
   std::string channel;
+  explicit Fixture(uint32_t graceMs = 0) : transport("11111111111111111111111111111111", 16, 8, 1000, graceMs) {}
   void poll(uint64_t now) {
     const std::size_t before = port.reads;
     transport.poll(port, now, 64, token, wake);
@@ -137,6 +138,41 @@ void closedConnectionOffersHandshake() {
   f.port.add(f.request(1, "hello", "{\"protocol\":1}")); f.drain(5);
   require(f.transport.view().leaseActive && f.transport.view().lastSequence == 1, "fresh handshake required");
 }
+void shortGapPausesIoAndKeepsSession() {
+  Fixture f(20); f.hello();
+  const auto request = f.request(2, "heartbeat", "{}");
+  f.port.add(request.substr(0, 35)); f.drain(2);
+  const auto reads = f.port.reads, writes = f.port.output.size();
+  f.port.cable = false; f.port.add(request.substr(35)); f.poll(3); f.poll(7);
+  require(f.port.reads == reads && f.port.output.size() == writes, "uncertain link must pause all I/O");
+  require(f.transport.view().leaseActive && f.transport.view().lastSequence == 1, "short gap keeps existing session only");
+  f.port.cable = true; f.drain(8);
+  require(f.transport.view().lastSequence == 2, "partial frame resumes on the same channel");
+  require(f.transport.stats().filteredLinkGaps == 1 && f.transport.stats().linkLosses == 0, "short raw gap counted separately");
+}
+void graceBoundaryDisconnectsAndRequiresHandshake() {
+  Fixture f(20); f.hello();
+  f.port.cable = false; f.poll(3); f.poll(22);
+  require(f.transport.view().leaseActive, "before grace boundary keeps session");
+  f.poll(23); f.poll(24);
+  require(!f.transport.view().leaseActive && f.transport.stats().linkLosses == 1, "boundary disconnects exactly once");
+  f.port.cable = true; f.port.add(f.request(2, "heartbeat", "{}")); f.drain(25);
+  require(f.transport.stats().reopens == 1 && !f.transport.view().leaseActive, "old command cannot restore control");
+  Fixture late(20); late.hello(); late.port.cable = false; late.poll(3);
+  late.port.cable = true; late.poll(23);
+  require(!late.transport.view().leaseActive && late.transport.stats().linkLosses == 1,
+          "recovery observed at boundary still disconnects");
+}
+void isolatedGapsDoNotAccumulateOrRenewLeases() {
+  Fixture f(20); f.hello();
+  for (unsigned i = 0; i < 10; ++i) {
+    f.port.cable = false; f.poll(3 + i * 10);
+    f.port.cable = true; f.poll(8 + i * 10);
+  }
+  require(f.transport.stats().filteredLinkGaps == 10 && f.transport.stats().linkLosses == 0, "isolated gaps never accumulate");
+  f.port.cable = false; f.poll(995); f.poll(1001);
+  require(!f.transport.view().leaseActive, "grace must not extend original lease");
+}
 }  //  测试内部命名空间 / Internal test namespace
 
 int main() {
@@ -148,5 +184,8 @@ int main() {
     failedWriteAndRecovery(); std::cout << "PASS transport_short_write_recovery\n";
     expiredConnectionAndProbe(); std::cout << "PASS transport_expiry_reconnect\n";
     closedConnectionOffersHandshake(); std::cout << "PASS transport_closed_connection_handshake\n";
+    shortGapPausesIoAndKeepsSession(); std::cout << "PASS transport_short_gap_pauses_io_preserves_session\n";
+    graceBoundaryDisconnectsAndRequiresHandshake(); std::cout << "PASS transport_grace_boundary_requires_handshake\n";
+    isolatedGapsDoNotAccumulateOrRenewLeases(); std::cout << "PASS transport_isolated_gaps_preserve_lease_deadline\n";
   } catch (const std::exception& error) { std::cerr << "FAIL " << error.what() << '\n'; return EXIT_FAILURE; }
 }

@@ -9,6 +9,13 @@
 #ifndef OMIPET_PROTOCOL_USB
 #define OMIPET_PROTOCOL_USB 0
 #endif
+//  短连接信号过滤默认关闭，仅在隔离 USB 实验中显式选择。 / Short link-signal filtering stays off unless explicitly selected for an isolated USB experiment.
+#ifndef OMIPET_PROTOCOL_LINK_GRACE_MS
+#define OMIPET_PROTOCOL_LINK_GRACE_MS 0
+#endif
+#if OMIPET_PROTOCOL_LINK_GRACE_MS && !OMIPET_PROTOCOL_USB
+#error "Link grace requires USB protocol"
+#endif
 //  挑战校验仅在隔离实验构建中显式启用 / Enable freshness challenges explicitly in isolated experiment builds only
 #ifndef OMIPET_PROTOCOL_FRESHNESS_CHALLENGE
 #define OMIPET_PROTOCOL_FRESHNESS_CHALLENGE 0
@@ -61,6 +68,8 @@
 #endif
 static_assert(OMIPET_PROTOCOL_MAX_SESSIONS > 0, "Positive session capacity required");
 static_assert(OMIPET_PROTOCOL_LEASE_MS > 0 && OMIPET_PROTOCOL_LEASE_MS <= 4294967295ULL, "Lease must fit uint32");
+static_assert(OMIPET_PROTOCOL_LINK_GRACE_MS >= 0 && OMIPET_PROTOCOL_LINK_GRACE_MS < OMIPET_PROTOCOL_LEASE_MS,
+              "Link grace must be nonnegative and shorter than the lease");
 static_assert(OMIPET_PROTOCOL_TX_BUFFER_BYTES >= OMIPET_PROTOCOL_MAX_JSON_BYTES + 8, "TX buffer must hold a complete frame");
 static_assert(OMIPET_PROTOCOL_WRITE_WAIT_MS > 0, "HWCDC requires a positive write timeout");
 #endif

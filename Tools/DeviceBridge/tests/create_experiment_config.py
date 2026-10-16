@@ -27,6 +27,7 @@ if __name__ == "__main__":
     parser.add_argument("--lease-ms", type=positive)
     parser.add_argument("--tx-buffer-bytes", type=positive)
     parser.add_argument("--write-wait-ms", type=positive)
+    parser.add_argument("--link-grace-ms", type=positive)
     args = parser.parse_args()
     usb_values = (args.max_sessions, args.lease_ms, args.tx_buffer_bytes, args.write_wait_ms)
     if args.usb and (not all(usb_values) or args.lease_ms > 0xFFFFFFFF or args.tx_buffer_bytes < args.max_json_bytes + 8):
@@ -35,6 +36,8 @@ if __name__ == "__main__":
         parser.error("USB budgets require --usb")
     if args.sof_reset_fix and not args.usb:
         parser.error("The isolated SOF fix requires --usb")
+    if args.link_grace_ms is not None and (not args.usb or args.link_grace_ms >= args.lease_ms):
+        parser.error("Link grace requires --usb and must be shorter than the lease")
     if args.freshness_challenge and not args.usb:
         parser.error("Freshness challenge requires --usb")
     if args.monitor_lights and not (args.usb and args.freshness_challenge):
@@ -64,6 +67,8 @@ if __name__ == "__main__":
         flags += "\n-DOMIPET_PROTOCOL_LEASE_MS=" + str(args.lease_ms)
         flags += "\n-DOMIPET_PROTOCOL_TX_BUFFER_BYTES=" + str(args.tx_buffer_bytes)
         flags += "\n-DOMIPET_PROTOCOL_WRITE_WAIT_MS=" + str(args.write_wait_ms)
+        if args.link_grace_ms is not None:
+            flags += "\n-DOMIPET_PROTOCOL_LINK_GRACE_MS=" + str(args.link_grace_ms)
         if args.freshness_challenge:
             flags += "\n-DOMIPET_PROTOCOL_FRESHNESS_CHALLENGE=1"
         if args.monitor_lights:

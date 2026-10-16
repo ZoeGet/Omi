@@ -17,6 +17,7 @@ struct TransportStats {
   uint32_t lastSessionFailure = 0;
   uint32_t lastFrameFailure = 0;
   uint32_t linkLosses = 0;
+  uint32_t filteredLinkGaps = 0;
   uint32_t reopens = 0;
   uint32_t linkDownPolls = 0;
   uint64_t lastLinkDownMs = 0;
@@ -27,8 +28,9 @@ struct TransportStats {
 template <std::size_t MaxJsonBytes>
 class ProtocolTransport {
  public:
-  ProtocolTransport(const char* boot, std::size_t maxSessions, std::size_t maxDepth, uint32_t leaseMs)
-      : session_(boot, {MaxJsonBytes, maxSessions, maxDepth, leaseMs}), leaseMs_(leaseMs) {}
+  ProtocolTransport(const char* boot, std::size_t maxSessions, std::size_t maxDepth, uint32_t leaseMs,
+                    uint32_t linkGraceMs = 0)
+      : session_(boot, {MaxJsonBytes, maxSessions, maxDepth, leaseMs}), leaseMs_(leaseMs), linkGraceMs_(linkGraceMs) {}
 
   void disconnect() {
     session_.disconnect();
@@ -48,20 +50,26 @@ class ProtocolTransport {
   void poll(Port& port, uint64_t now, std::size_t rxBudget, NewToken newToken, void (*debugWake)()) {
     if (!session_.advance(now)) { disconnect(); return; }
     if (!port.plugged()) {
-      if (wasPlugged_) {
-        ++stats_.linkLosses;
+      if (!linkDownActive_) {
         linkDownAt_ = now;
         linkDownActive_ = true;
       }
       ++stats_.linkDownPolls;
-      wasPlugged_ = false;
-      disconnect();
+      //  可选宽限期内暂停读写，不续租；默认零宽限保持原行为。 / Pause I/O without renewing leases during optional grace; zero preserves existing behavior.
+      if (now - linkDownAt_ >= linkGraceMs_) {
+        if (wasPlugged_) ++stats_.linkLosses;
+        wasPlugged_ = false;
+        disconnect();
+      }
       return;
     }
     if (linkDownActive_) {
-      //  仅测量原有断线信号的持续时间，不改变断线处理 / Measure existing link-signal gaps without changing disconnect handling
       stats_.lastLinkDownMs = now >= linkDownAt_ ? now - linkDownAt_ : 0;
       if (stats_.lastLinkDownMs > stats_.maxLinkDownMs) stats_.maxLinkDownMs = stats_.lastLinkDownMs;
+      if (wasPlugged_) {
+        if (stats_.lastLinkDownMs < linkGraceMs_) ++stats_.filteredLinkGaps;
+        else { ++stats_.linkLosses; disconnect(); }
+      }
       linkDownActive_ = false;
     }
     wasPlugged_ = true;
@@ -138,6 +146,7 @@ class ProtocolTransport {
   std::size_t pending_ = 0;
   uint64_t pendingAt_ = 0;
   uint32_t leaseMs_;
+  uint32_t linkGraceMs_;
   SessionView pendingView_ = {"local", "unknown", false, 0, 0};
   bool welcome_ = false;
   bool wasPlugged_ = true;

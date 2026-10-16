@@ -74,6 +74,28 @@ class SofFixTests(unittest.TestCase):
                     self.assertEqual(options["board_build.cmake_extra_args"], "-DOMIPET_USB_SOF_FIX=ON")
             self.assertEqual(stable.read_bytes(), original)
 
+    def test_link_grace_requires_explicit_valid_usb_budget(self):
+        repository = Path(__file__).resolve().parents[3]
+        with tempfile.TemporaryDirectory() as directory:
+            for index, (grace, usb, expected) in enumerate(((None, True, 0), (20, True, 0),
+                    (-1, True, 2), (0, True, 2), (5000, True, 2), (20, False, 2))):
+                output = Path(directory) / (str(index) + ".ini")
+                arguments = [sys.executable, str(Path(__file__).with_name("create_experiment_config.py")),
+                    "--output", str(output), "--build-dir", str(repository / "Firmware/.pio/test-link-grace"),
+                    "--max-json-bytes", "4096", "--rx-bytes-per-loop", "64", "--max-json-depth", "8"]
+                if usb:
+                    arguments += ["--usb", "--max-sessions", "16", "--lease-ms", "5000",
+                                  "--tx-buffer-bytes", "8192", "--write-wait-ms", "1"]
+                if grace is not None:
+                    arguments += ["--link-grace-ms", str(grace)]
+                result = subprocess.run(arguments, capture_output=True, text=True)
+                self.assertEqual(result.returncode, expected, result.stderr)
+                if expected == 0:
+                    flags = output.read_text(encoding="utf-8")
+                    self.assertEqual("-DOMIPET_PROTOCOL_LINK_GRACE_MS=" in flags, grace is not None)
+                else:
+                    self.assertFalse(output.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

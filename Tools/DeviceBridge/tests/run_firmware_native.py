@@ -54,6 +54,13 @@ def main():
                                      "-DOMIPET_PROTOCOL_LEASE_MS=1000", "-DOMIPET_PROTOCOL_TX_BUFFER_BYTES=8192",
                                      "-DOMIPET_PROTOCOL_WRITE_WAIT_MS=1"]
         run(check + usb_flags, source='#include "protocol_experiment_config.h"\n')
+        run(check + usb_flags + ["-DOMIPET_PROTOCOL_LINK_GRACE_MS=20"],
+            source='#include "protocol_experiment_config.h"\n')
+        for value in (-1, 1000):
+            run(check + usb_flags + ["-DOMIPET_PROTOCOL_LINK_GRACE_MS=" + str(value)],
+                source='#include "protocol_experiment_config.h"\n', success=False)
+        run(check + ["-DOMIPET_PROTOCOL_LINK_GRACE_MS=20"],
+            source='#include "protocol_experiment_config.h"\n', success=False)
         challenge_flags = usb_flags + ["-DOMIPET_PROTOCOL_FRESHNESS_CHALLENGE=1"]
         run(check + challenge_flags, source='#include "protocol_experiment_config.h"\n')
         run(check + challenge_flags + ["-DOMIPET_MONITOR_LIGHTS=1"],
@@ -178,7 +185,7 @@ void tick(bool sof) { USB_SERIAL_JTAG.int_raw.sof_int_raw = sof ? 1 : 0; usb_ser
         print(effect_result.stdout, end="")
         print(pairing_result.stdout, end="")
         print(monitor_transport_result.stdout, end="")
-        report = dict(result="pass", configChecks=15,
+        report = dict(result="pass", configChecks=19,
                       nativeTests=[line[5:] for line in result.stdout.splitlines() if line.startswith("PASS ")],
                       sessionTests=[line[5:] for line in session_result.stdout.splitlines() if line.startswith("PASS ")],
                       transportTests=[line[5:] for line in transport_result.stdout.splitlines() if line.startswith("PASS ")],
