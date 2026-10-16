@@ -1,4 +1,5 @@
 #include "wireless_pairing.h"
+#include "wireless_control.h"
 #if OMIPET_WIFI_PAIRING
 #include <Arduino.h>
 #include <WiFi.h>
@@ -123,6 +124,7 @@ struct Peer {
   uint8_t digest[32] = {}, key[32] = {}, nonce[32] = {};
   int phase = 0;
   bool attempt = false;
+  uint32_t connection = 0;
   Peer() { mbedtls_sha256_init(&hash); }
   ~Peer() {
     mbedtls_sha256_free(&hash);
@@ -131,6 +133,9 @@ struct Peer {
 };
 void freePeer(void* value) {
   auto* peer = static_cast<Peer*>(value);
+#if OMIPET_WIFI_CONTROL
+  OmiPetProtocol::closeWirelessControl(peer->connection);
+#endif
   Lock lock;
   if (peer->attempt) boot.finishAttempt(false, nowMs());
   delete peer;
@@ -278,6 +283,9 @@ esp_err_t websocketHandler(httpd_req_t* req) {
   if (req->method == HTTP_GET) {
     auto* peer = new (std::nothrow) Peer;
     if (!peer) return ESP_ERR_NO_MEM;
+    static uint32_t nextConnection = 0;
+    if (++nextConnection == 0) ++nextConnection;
+    peer->connection = nextConnection;
     req->sess_ctx = peer;
     req->free_ctx = freePeer;
     return ESP_OK;
@@ -289,6 +297,21 @@ esp_err_t websocketHandler(httpd_req_t* req) {
   if (!buffer) return ESP_ERR_NO_MEM;
   frame.payload = buffer.get();
   if (httpd_ws_recv_frame(req, &frame, frame.len) != ESP_OK) return ESP_FAIL;
+#if OMIPET_WIFI_CONTROL
+  auto* peer = static_cast<Peer*>(req->sess_ctx);
+  if (peer && peer->auth.authorized()) {
+    if (static_cast<int32_t>(static_cast<uint32_t>(nowMs()) - deadlineMs.load()) >= 0) return ESP_FAIL;
+    std::unique_ptr<char[]> reply(new (std::nothrow) char[kFrameBytes + 1]);
+    if (!reply || !OmiPetProtocol::exchangeWirelessControl(peer->connection,
+        reinterpret_cast<char*>(buffer.get()), frame.len, reply.get())) return ESP_FAIL;
+    httpd_ws_frame_t response{};
+    response.type = HTTPD_WS_TYPE_TEXT;
+    response.payload = reinterpret_cast<uint8_t*>(reply.get());
+    response.len = std::strlen(reply.get());
+    deadlineMs = static_cast<uint32_t>(nowMs() + kStepMs);
+    return httpd_ws_send_frame(req, &response);
+  }
+#endif
   auto request = parse(reinterpret_cast<char*>(buffer.get()), frame.len);
   if (!request || !req->sess_ctx) return ESP_FAIL;
   Lock lock;

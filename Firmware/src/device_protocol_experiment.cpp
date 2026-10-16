@@ -48,7 +48,7 @@ SerialFramer<OMIPET_PROTOCOL_MAX_JSON_BYTES> gFramer;
 #endif
 }  //  内部命名空间 / Internal namespace
 
-void pollSerialExperiment(void (*debugWake)(), bool localLightAllowed) {
+void pollSerialExperiment(void (*debugWake)(), bool localLightAllowed, const char* reason) {
 #if OMIPET_PROTOCOL_USB
   if (!gBuffersReady) return;
   const uint64_t start = static_cast<uint64_t>(esp_timer_get_time());
@@ -61,12 +61,13 @@ void pollSerialExperiment(void (*debugWake)(), bool localLightAllowed) {
   }
   if (gBusReset.exchange(false)) { ++gBusResets; gTransport->disconnect(); }
   UsbPort port;
-  gTransport->allowLocalLightCommand(localLightAllowed);
+  gTransport->allowLocalLightCommand(localLightAllowed, reason);
   gTransport->poll(port, start / 1000, OMIPET_PROTOCOL_RX_BYTES_PER_LOOP, newToken, debugWake);
   const uint64_t elapsed = static_cast<uint64_t>(esp_timer_get_time()) - start;
   if (elapsed > gMaxPollUs) gMaxPollUs = elapsed;
 #else
   (void)localLightAllowed;
+  (void)reason;
   for (std::size_t count = 0; count < OMIPET_PROTOCOL_RX_BYTES_PER_LOOP && Serial.available() > 0; ++count) {
     const int input = Serial.read();
     if (input < 0) return;
@@ -135,6 +136,7 @@ MonitorOutput usbMonitorOutput() {
 void yieldUsbMonitorToVoice() {
   if (gTransport) gTransport->yieldMonitorToVoice();
 }
+bool takeUsbLocalSelection() { return gTransport && gTransport->takeLocalSelection(); }
 #endif
 
 }  //  协议命名空间 / Protocol namespace

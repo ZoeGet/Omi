@@ -22,6 +22,12 @@ if(OMIPET_WIFI_PAIRING)
     list(APPEND OMIPET_SOURCES "wireless_pairing.cpp" "pairing_tls_identity.cpp"
         "pairing_tls_store.cpp" "pairing_nvs_store.cpp")
 endif()
+if(OMIPET_WIFI_CONTROL)
+    if(NOT OMIPET_WIFI_PAIRING)
+        message(FATAL_ERROR "Wireless control requires authenticated pairing")
+    endif()
+    list(APPEND OMIPET_SOURCES "wireless_control.cpp")
+endif()
 
 idf_component_register(
     SRCS ${OMIPET_SOURCES}
@@ -30,4 +36,7 @@ idf_component_register(
 )
 if(OMIPET_WIFI_PAIRING)
     target_compile_definitions(${COMPONENT_LIB} PRIVATE OMIPET_WIFI_PAIRING=1)
+endif()
+if(OMIPET_WIFI_CONTROL)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE OMIPET_WIFI_CONTROL=1)
 endif()

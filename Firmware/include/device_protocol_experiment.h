@@ -9,7 +9,7 @@
 namespace OmiPetProtocol {
 
 //  有界处理串口输入，仅完整帧诊断和帧外调试回调 / Process serial input within a budget, diagnosing frames and forwarding only external debug input
-void pollSerialExperiment(void (*debugWake)(), bool localLightAllowed = true);
+void pollSerialExperiment(void (*debugWake)(), bool localLightAllowed = true, const char* reason = "voice-active");
 
 #if OMIPET_PROTOCOL_USB
 //  串口 begin 前设置实验缓冲，启动后只读汇报运行状态 / Configure experimental buffers before serial begin and report runtime state afterward
@@ -20,6 +20,7 @@ SessionView usbExperimentView();
 LocalLightCommand usbLocalLightCommand();
 MonitorOutput usbMonitorOutput();
 void yieldUsbMonitorToVoice();
+bool takeUsbLocalSelection();
 #endif
 
 }  //  协议命名空间 / Protocol namespace

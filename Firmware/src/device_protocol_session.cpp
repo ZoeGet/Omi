@@ -229,6 +229,7 @@ void ProtocolSession::disconnect() {
   opened_ = false;
   state_ = State{};
   voiceSuppressed_ = false;
+  localSelected_ = false;
   cJSON_Delete(lastRequest_);
   lastRequest_ = nullptr;
 }
@@ -385,7 +386,7 @@ SessionResult ProtocolSession::receive(const char* data, std::size_t length, uin
 #if OMIPET_DESKTOP_CONTROL
     else if (info.type == CommandType::Light) {
       if (state_.monitor) code = "monitor-mode-active";
-      else if (!localLightAllowed_) code = "voice-active";
+      else if (!localLightAllowed_) code = localLightReason_;
       else if (light_.revision == UINT32_MAX) code = "light-revision-exhausted";
       else {
         const char* issue = localLight(body, nextLight);
@@ -433,6 +434,7 @@ SessionResult ProtocolSession::receive(const char* data, std::size_t length, uin
     lastOk_ = ok;
     lastCode_ = code;
     if (lightChanged) light_ = nextLight;
+    if (ok && (lightChanged || (info.type == CommandType::Release && !nextMonitorSelected))) localSelected_ = true;
   }
   cJSON_Delete(request);
   return result;

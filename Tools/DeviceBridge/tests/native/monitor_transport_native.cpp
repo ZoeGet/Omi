@@ -42,4 +42,13 @@ int main() {
   assert(OmiPetProtocol::selectMonitorTransport(usb, wifi, true) ==
          MonitorTransport::Usb);
   std::puts("PASS usb_reconnect_preempts_wifi");
+  OmiPetProtocol::MonitorTransportSelection selection;
+  assert(selection.select(usb, wifi, true) == MonitorTransport::Usb);
+  usb.leaseActive = false;
+  assert(selection.select(usb, wifi, true) == MonitorTransport::Wifi);
+  wifi.leaseActive = false;
+  assert(selection.select(usb, wifi, false) == MonitorTransport::Wifi);
+  selection.local(MonitorTransport::Usb);
+  assert(selection.select(usb, wifi, false) == MonitorTransport::Usb);
+  std::puts("PASS disconnect_preserves_last_output_until_explicit_local_choice");
 }

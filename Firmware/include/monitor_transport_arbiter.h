@@ -26,4 +26,17 @@ inline MonitorTransport selectMonitorTransport(const SessionView& usb,
   return MonitorTransport::None;
 }
 
+//  无活动监控时保留上次归属，让断联关灯与显式本地选择正确延续 / Preserve ownership without active monitoring so disconnect-off and explicit local choices persist
+class MonitorTransportSelection {
+ public:
+  void local(MonitorTransport transport) { selected_ = transport; }
+  MonitorTransport select(const SessionView& usb, const SessionView& wifi, bool authenticated) {
+    const auto active = selectMonitorTransport(usb, wifi, authenticated);
+    if (active != MonitorTransport::None) selected_ = active;
+    return selected_;
+  }
+ private:
+  MonitorTransport selected_ = MonitorTransport::Usb;
+};
+
 }  //  协议命名空间 / Protocol namespace

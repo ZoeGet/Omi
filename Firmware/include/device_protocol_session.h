@@ -56,7 +56,8 @@ class ProtocolSession {
   void disconnect();
   SessionView view() const;
   LocalLightCommand localLightCommand() const { return light_; }
-  void allowLocalLightCommand(bool allowed) { localLightAllowed_ = allowed; }
+  void allowLocalLightCommand(bool allowed, const char* reason = "voice-active") { localLightAllowed_ = allowed; localLightReason_ = reason; }
+  bool takeLocalSelection() { const bool selected = localSelected_; localSelected_ = false; return selected; }
   MonitorOutput monitorOutput() const;
   //  语音退出监控输出，后续快照不能抢回，直到释放或新连接 / Voice exits monitor output and suppresses snapshots until release or a new connection
   void yieldMonitorToVoice() { monitorSelected_ = false; voiceSuppressed_ = true; }
@@ -92,6 +93,8 @@ class ProtocolSession {
   const char* lastCode_ = "ok";
   LocalLightCommand light_;
   bool localLightAllowed_ = true;
+  const char* localLightReason_ = "voice-active";
+  bool localSelected_ = false;
   bool monitorSelected_ = false;
   bool voiceSuppressed_ = false;
 };

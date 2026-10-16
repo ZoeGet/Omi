@@ -15,6 +15,8 @@
 #include "time_service.h"
 #include "wifi_manager.h"
 #include "wireless_pairing.h"
+#include "wireless_control.h"
+#include "monitor_transport_arbiter.h"
 
 //  OmiPet 固件主循环和模块编排 / OmiPet firmware entry point and module orchestration
 #include "ics43434_mic.h"
@@ -75,6 +77,9 @@ bool gWakeLightActive = false;  //  唤醒后等待指令时显示独立的白�
 bool gVoiceLightAppliedThisLoop = false;  //  同一轮循环内语音动作优先于上位机设置 / Give a voice action priority over desktop settings in the same loop
 #endif
 OmiPetLed::EffectController gWakeEffects(OmiPetLed::strip);  //  避免唤醒提示改写原本灯效 / Keep the wake indication separate from the saved local effect
+#if OMIPET_WIFI_CONTROL
+OmiPetProtocol::MonitorTransportSelection gMonitorTransport;
+#endif
 
 #if OMIPET_MONITOR_LIGHTS
 OmiPetLed::VoiceLightOverride gVoiceLightOverride;  //  语音接管保持到远端退出 / Voice takeover lasts until remote exit
@@ -92,6 +97,9 @@ void beginWakeLight() {
   gVoiceLightOverride.onVoiceInteraction();
 #if OMIPET_MONITOR_GREEN_OFF
   OmiPetProtocol::yieldUsbMonitorToVoice();
+#if OMIPET_WIFI_CONTROL
+  OmiPetProtocol::yieldWirelessMonitorToVoice();
+#endif
 #endif
   gLightOwner = OmiPetLed::LightOwner::Local;
 #endif
@@ -475,7 +483,19 @@ void updateVoiceDebugInput() {
 #if OMIPET_DESKTOP_CONTROL
   localLightAllowed = localLightAllowed && !gVoiceLightAppliedThisLoop;
 #endif
+#if OMIPET_WIFI_CONTROL
+  const bool wifiMonitor = OmiPetProtocol::monitorSessionActive(OmiPetProtocol::wirelessControlView()) &&
+                           OmiPetProtocol::wirelessMonitorOutput() == OmiPetProtocol::MonitorOutput::Connected;
+  OmiPetProtocol::pollSerialExperiment(triggerVoiceDebugWake, localLightAllowed && !wifiMonitor,
+                                       wifiMonitor ? "monitor-mode-active" : "voice-active");
+  const bool usbActive = OmiPetProtocol::usbExperimentView().leaseActive;
+  OmiPetProtocol::pollWirelessControl(OmiPetNetwork::wifi.connected(), localLightAllowed && !gWakeLightActive && !usbActive,
+                                      usbActive ? "usb-priority" : "voice-active");
+  if (OmiPetProtocol::takeWirelessLocalSelection()) gMonitorTransport.local(OmiPetProtocol::MonitorTransport::Wifi);
+  if (OmiPetProtocol::takeUsbLocalSelection()) gMonitorTransport.local(OmiPetProtocol::MonitorTransport::Usb);
+#else
   OmiPetProtocol::pollSerialExperiment(triggerVoiceDebugWake, localLightAllowed);
+#endif
 #else
   while (Serial.available() > 0) {
     if (Serial.read() == 'w') triggerVoiceDebugWake();
@@ -486,9 +506,19 @@ void updateVoiceDebugInput() {
 //  仅应用新修订的本地命令，监控和唤醒期间由协议拒绝手动设置 / Apply only a new local-command revision; the protocol rejects manual settings during monitoring or wake listening
 void updateDesktopLightCommand() {
   static uint32_t appliedRevision = 0;
-  const OmiPetProtocol::LocalLightCommand command = OmiPetProtocol::usbLocalLightCommand();
+  OmiPetProtocol::LocalLightCommand command = OmiPetProtocol::usbLocalLightCommand();
+#if OMIPET_WIFI_CONTROL
+  static uint32_t wifiRevision = 0;
+  const auto wifi = OmiPetProtocol::wirelessLocalLightCommand();
+  const bool usbChanged = command.revision != 0 && command.revision != appliedRevision;
+  const bool wifiChanged = wifi.revision != 0 && wifi.revision != wifiRevision;
+  appliedRevision = command.revision; wifiRevision = wifi.revision;
+  if (!usbChanged && !wifiChanged) return;
+  if (!usbChanged) command = wifi;
+#else
   if (command.revision == 0 || command.revision == appliedRevision) return;
   appliedRevision = command.revision;
+#endif
   using namespace OmiPetLed;
   using OmiPetProtocol::LocalLightEffect;
   strip.setBrightness(command.brightness);
@@ -511,12 +541,20 @@ void updateDesktopLightCommand() {
 //  仅在隔离构建中把有效协议状态映射到实体灯带 / Map valid protocol state to physical LEDs only in isolated builds
 void updateMonitorLights() {
   using namespace OmiPetLed;
-  const OmiPetProtocol::SessionView view = OmiPetProtocol::usbExperimentView();
+  OmiPetProtocol::SessionView view = OmiPetProtocol::usbExperimentView();
+  auto monitorOutput = OmiPetProtocol::usbMonitorOutput();
+#if OMIPET_WIFI_CONTROL
+  const auto wifi = OmiPetProtocol::wirelessControlView();
+  if (gMonitorTransport.select(view, wifi, true) == OmiPetProtocol::MonitorTransport::Wifi) {
+    view = wifi;
+    monitorOutput = OmiPetProtocol::wirelessMonitorOutput();
+  }
+#endif
   const bool voiceOverride = gVoiceLightOverride.observe(view);
   if (gWakeLightActive) return;
 #if OMIPET_MONITOR_GREEN_OFF
   const LightArbitrationPolicy policy{LightFallback::Green, LightFallback::Green};
-  const LightDecision decision = arbitrateLight(view, voiceOverride, policy, OmiPetProtocol::usbMonitorOutput());
+  const LightDecision decision = arbitrateLight(view, voiceOverride, policy, monitorOutput);
 #else
   const LightArbitrationPolicy policy{LightFallback::Local, LightFallback::Local};
   const LightDecision decision = arbitrateLight(view, voiceOverride, policy);

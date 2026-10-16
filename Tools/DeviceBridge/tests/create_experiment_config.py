@@ -19,6 +19,7 @@ if __name__ == "__main__":
     parser.add_argument("--max-json-depth", type=positive, required=True)
     parser.add_argument("--usb", action="store_true")
     parser.add_argument("--wireless-pairing", action="store_true")
+    parser.add_argument("--wireless-control", action="store_true")
     parser.add_argument("--sof-reset-fix", action="store_true")
     parser.add_argument("--freshness-challenge", action="store_true")
     parser.add_argument("--monitor-lights", action="store_true")
@@ -48,6 +49,8 @@ if __name__ == "__main__":
     if args.monitor_green_off and not args.monitor_lights:
         parser.error("Green/off policy requires --monitor-lights")
     firmware = Path(__file__).resolve().parents[3] / "Firmware"
+    if args.wireless_control and not (args.wireless_pairing and args.usb and args.desktop_control and args.monitor_green_off):
+        parser.error("Wireless control requires pairing and the existing USB desktop/monitor policy")
     output, build = args.output.resolve(), args.build_dir.resolve()
     stable = (firmware / ".pio/build").resolve()
     if not build.is_relative_to(firmware / ".pio") or stable.is_relative_to(build) or build.is_relative_to(stable):
@@ -96,6 +99,8 @@ if __name__ == "__main__":
         settings["board_build.cmake_extra_args"] += ' -DSDKCONFIG_DEFAULTS="' + defaults.as_posix() + '"'
         settings["board_build.esp-idf.sdkconfig_path"] = sdkconfig.as_posix()
     output.parent.mkdir(parents=True, exist_ok=True)
+    if args.wireless_control:
+        config["env:esp32-s3-devkitc-1"]["board_build.cmake_extra_args"] += " -DOMIPET_WIFI_CONTROL=ON"
     with output.open("x", encoding="utf-8") as stream:
         config.write(stream)
     print("Generated compile-only configuration: " + str(output))

@@ -41,7 +41,8 @@ class ProtocolTransport {
 
   SessionView view() const { return session_.view(); }
   LocalLightCommand localLightCommand() const { return session_.localLightCommand(); }
-  void allowLocalLightCommand(bool allowed) { session_.allowLocalLightCommand(allowed); }
+  void allowLocalLightCommand(bool allowed, const char* reason = "voice-active") { session_.allowLocalLightCommand(allowed, reason); }
+  bool takeLocalSelection() { return session_.takeLocalSelection(); }
   MonitorOutput monitorOutput() const { return session_.monitorOutput(); }
   void yieldMonitorToVoice() { session_.yieldMonitorToVoice(); }
   const TransportStats& stats() const { return stats_; }

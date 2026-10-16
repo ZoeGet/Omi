@@ -46,8 +46,10 @@ int main() {
   require(session.localLightCommand().revision == 0, "no partial apply");
   exchange(session, 2, "light", light, "ok");
   const LocalLightCommand accepted = session.localLightCommand();
+  require(session.takeLocalSelection() && !session.takeLocalSelection(), "local intent consumed once");
   require(accepted.revision == 1 && accepted.effect == LocalLightEffect::Sweep && accepted.blue == 255 && accepted.brightness == 16, "accepted setting");
   exchange(session, 2, "light", light, "ok");
+  require(!session.takeLocalSelection(), "duplicate does not reclaim local ownership");
   require(session.localLightCommand().revision == 1, "duplicate does not restart");
   std::cout << "PASS desktop_light_atomic_acceptance_and_retry_deduplication\n";
 
@@ -62,6 +64,10 @@ int main() {
   exchange(session, 7, "release", "{}", "ok");
   exchange(session, 8, "light", light, "ok");
   require(session.localLightCommand().revision == 2, "release enables manual command");
+  session.takeLocalSelection();
+  session.allowLocalLightCommand(false, "usb-priority");
+  exchange(session, 9, "light", light, "usb-priority");
+  require(session.localLightCommand().revision == 2 && !session.takeLocalSelection(), "USB blocks wireless manual ownership");
   session.disconnect();
   require(session.localLightCommand().revision == 2, "disconnect does not replay or erase local setting");
   std::cout << "PASS desktop_monitor_and_voice_lock_manual_settings_until_release\n";
