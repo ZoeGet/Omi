@@ -1,12 +1,13 @@
 # OmiPet 共用通信协议
 
-本目录提供 USB 协议、状态桥接、模拟器和验证工具。用户使用的唯一桌面入口见 [Tools/Desktop](../Desktop/README.md)。WSS 六位码配对、凭据保存与重连认证已接入隔离实验，控制命令仍使用 USB；实现和验证边界见 [PAIRING.md](PAIRING.md)。
+本目录提供 USB/WSS 共用协议、状态桥接、模拟器和验证工具。用户使用的唯一桌面入口见 [Tools/Desktop](../Desktop/README.md)。隔离实验已支持六位码配对、凭据保存、重连认证及无线灯光/监控；实现和验证边界见 [PAIRING.md](PAIRING.md)。
 
 | 文件 | 职责 |
 | --- | --- |
 | `protocol.py` | 有界解码、信封/快照校验、会话别名及有效期转换 |
 | `simulator.py`、`demo.py` | 无设备模拟与重试/过期验证 |
 | `usb_client.py`、`bridge.py` | USB 确认/重连和真实 Hook 状态桥接 |
+| `wss_stream.py` | 已认证 WSS 字节流适配，复用原有确认、重试及状态桥接 |
 | `verify_usb.py`、`verify_challenge.py`、`verify_fallback.py`、`verify_lights.py` | 分层实机协议检查；不能代替目视验收 |
 | `tests/` | Python 回归、原固件 C++ 原生检查、隔离构建配置生成 |
 
@@ -19,7 +20,7 @@
 ## 传输与信封 / Transport and envelope
 
 - USB：`@OMI ` + 一个紧凑 UTF-8 JSON 对象 + `\n`；兼容 `\r\n`。
-- WebSocket：相同 JSON 对象作为一条文本消息，没有串口前缀。这里只验证文本编解码，没有实现网络连接或 WebSocket 握手。
+- WebSocket：相同 JSON 对象作为一条文本消息，没有串口前缀；隔离控制固件在 TLS 身份校验及日常双向 HMAC 认证后接受 `?` 探测及协议消息。
 - 串口只将行首完全匹配前缀的内容交给协议解析。其他日志不执行为命令；前缀出现在日志中间也不会成为协议帧。
 - JSON 大小上限计算 UTF-8 字节数，串口前缀/换行不计入。接收缓冲有界，超长帧丢至换行后重新同步；截断不执行，重复 JSON 键、非有限数常量、错误版本和非法标识均拒绝。
 
@@ -82,7 +83,7 @@ snapshot 正文包含：
 
 2026-10-15 上位机隔离版增加 `light`：正文严格包含 `effect/red/green/blue/brightness`；effect 为 solid/rainbow/breathe/sweep/centerExpand/off，四个数值字段为 0–255 整数。仅本地模式且未在唤醒等待时接受；监控中返回 `monitor-mode-active`，语音活动中返回 `voice-active`。同序号重试不重复启动动画，失联或 release 不撤销已接受的本地设置，重启仍用原启动灯光。颜色和模式一次更新再绘制，设备自行播放动画，不逐帧传 LED 数据。固件 `OMIPET_DESKTOP_CONTROL` 默认关闭。
 
-Windows 控制中心、实机步骤与最新验证见 [Desktop](../Desktop/README.md)。无线隔离实验沿用上述能力及 20 ms USB 过滤，另启用 WSS 配对和认证；无线控制、屏幕摘要及完整设备状态读回尚未接入。
+Windows 控制中心、实机步骤与最新验证见 [Desktop](../Desktop/README.md)。无线隔离实验沿用上述能力及 20 ms USB 过滤，另启用 WSS 配对、认证和控制。USB 有效监控优先，无线在 USB 释放后接续；语音同时退出两路监控，旧快照不能接管。ACK 描述本连接状态，跨连接最终输出及完整灯光读回、屏幕对话摘要尚未接入。无线不提供串口音频健康日志。
 
 ## 状态来源与运行参数
 
