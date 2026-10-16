@@ -8,7 +8,7 @@ Tauri + React + MUI 界面已接入现有 Python USB 控制层。用户已确认
 - 本地灯光：颜色、0–255 亮度、常亮/彩虹/呼吸/跑马/扩散/关闭；编辑后点击应用，设备 ACK 才显示成功。
 - Codex 监控：延续本次监控中已确认的生命周期状态，持续核对宿主绑定；30 秒预算和 8 秒传输余量用于每次评估的传输有效期。无事件/完成/来源异常绿、运行红、审批或选项等待黄，扩散灯；断联关灯。监控中禁用手动调灯，语音接管后退出监控。
 - 通信/音频健康汇总、最近 200 条操作结果、状态目录和绑定文件选择。设置只在断开后修改。
-- 无线配对仍是明确标注的规划页；六位码/5 分钟/5 次策略未在此界面实现。灯带预览是编辑值，不是设备实时读回。
+- 无线隔离配对：设备地址、六位码、已保存设备与重连身份验证；后台执行、提交后清空码，收到确认才显示成功。需对应无线隔离固件，实机结果见 [配对实验](../DeviceBridge/PAIRING.md)。无线灯光控制尚未接入。灯带预览是编辑值，不是设备实时读回。
 
 ## 结构
 
@@ -28,7 +28,7 @@ Rust 只启动固定相邻路径 `omi-device/omi-device.exe` 并串行转发 JSO
 
 ## 构建和测试
 
-需要 Node.js、Rust MSVC、Microsoft C++ Build Tools“使用 C++ 的桌面开发”、WebView2、Python 3.10+。版本由两份锁文件和 `requirements-build.txt` 固定。
+需要 Node.js、Rust MSVC、Microsoft C++ Build Tools“使用 C++ 的桌面开发”、WebView2、Python 3.10+、CMake、Ninja，以及本机 PlatformIO SDK 中的 Mbed TLS 2.28.7 源码。版本由两份锁文件、原生配对构建检查和 `requirements-build.txt` 固定。
 
 ```powershell
 cd Tools/Desktop
@@ -44,7 +44,9 @@ npm run build
 
 `npm run dev` 仅在 `127.0.0.1:5173` 提供界面预览。`npm run tauri dev` 需先将构建出的 `build/helper/omi-device` 目录复制到 `src-tauri/target/debug/`；开发模式也使用同一后台，不引入另一套开发服务器协议。
 
-打包会检查许可文件，缺失时失败。`collect_licenses.py` 收集生产 npm、当前 Cargo 下载源、Python、pyserial 和 PyInstaller 许可；输出也包含构建时 Rust 依赖。源码、锁文件、构建脚本和许可可审查；缓存、exe、zip、诊断和本机状态不进入 Git。提交/推送仍须用户另行授权。
+打包会检查许可文件，缺失时失败。`collect_licenses.py` 收集生产 npm、当前 Cargo 下载源、Python、pyserial、PyInstaller、websocket-client 和 Mbed TLS 许可；输出也包含构建时 Rust 依赖。源码、锁文件、构建脚本和许可可审查；缓存、DLL、exe、zip、诊断和配对数据库不进入 Git。提交/推送仍须用户另行授权。
+
+2026-10-16 无线配对验收：新版便携包中首次六位码配对、设备重启后无新配对码、保存设备的“验证连接”均经用户实测通过。100 项桥接、17 项桌面和 7 项前端测试通过，设备及电脑已持久保存配对。网络负例与固件验证见 [PAIRING.md](../DeviceBridge/PAIRING.md)；无线灯光/监控传输仍待接入，现有控制使用 USB。
 
 ## 实机验证
 

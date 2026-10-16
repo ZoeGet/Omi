@@ -1,6 +1,6 @@
 # OmiPet 共用通信协议
 
-本目录提供 USB 协议、状态桥接、模拟器和验证工具。用户使用的唯一桌面入口见 [Tools/Desktop](../Desktop/README.md)。Wi-Fi/WSS 尚未接入，配对基础模块与已确认规则见 [PAIRING.md](PAIRING.md)。
+本目录提供 USB 协议、状态桥接、模拟器和验证工具。用户使用的唯一桌面入口见 [Tools/Desktop](../Desktop/README.md)。WSS 六位码配对、凭据保存与重连认证已接入隔离实验，控制命令仍使用 USB；实现和验证边界见 [PAIRING.md](PAIRING.md)。
 
 | 文件 | 职责 |
 | --- | --- |
@@ -35,7 +35,7 @@
 | `type` | welcome、hello、heartbeat、snapshot、release、可选 light 或 ack |
 | `body` | 对象，由消息类型约束 |
 
-三个标识分别防止设备重启、连接替换和主机会话混淆；它们不是 Wi-Fi 身份认证方案。真实 Wi-Fi 接入的配对/鉴权尚未实现。
+三个标识分别防止设备重启、连接替换和主机会话混淆；无线配对与认证由独立的 PAKE、证书指纹和双向 HMAC 实现，详见 [PAIRING.md](PAIRING.md)。
 
 ## 握手与确认 / Handshake and acknowledgements
 
@@ -82,7 +82,7 @@ snapshot 正文包含：
 
 2026-10-15 上位机隔离版增加 `light`：正文严格包含 `effect/red/green/blue/brightness`；effect 为 solid/rainbow/breathe/sweep/centerExpand/off，四个数值字段为 0–255 整数。仅本地模式且未在唤醒等待时接受；监控中返回 `monitor-mode-active`，语音活动中返回 `voice-active`。同序号重试不重复启动动画，失联或 release 不撤销已接受的本地设置，重启仍用原启动灯光。颜色和模式一次更新再绘制，设备自行播放动画，不逐帧传 LED 数据。固件 `OMIPET_DESKTOP_CONTROL` 默认关闭。
 
-Windows 控制中心、实机步骤与最新验证见 [Desktop](../Desktop/README.md)。当前设备使用支持上述能力及 20 ms 过滤的隔离 USB 应用；无线认证、WSS、屏幕摘要及完整设备状态读回尚未接入。
+Windows 控制中心、实机步骤与最新验证见 [Desktop](../Desktop/README.md)。无线隔离实验沿用上述能力及 20 ms USB 过滤，另启用 WSS 配对和认证；无线控制、屏幕摘要及完整设备状态读回尚未接入。
 
 ## 状态来源与运行参数
 
@@ -132,4 +132,4 @@ SOF 修复只在构建目录生成 SDK 源文件副本，不改上游安装包�
 
 ## 隐私与配对
 
-Hook 原始事件、真实会话/工具标识、宿主路径、串口日志、报告和镜像不提交。传输只使用连接内别名和状态；配对码、日常凭证和 TLS 私钥只留本地。配对基础模块尚未开启真实网络服务、自动凭证签发或 NVS 加密，不执行不可逆 eFuse 配置。提交边界见根目录 CONTRIBUTING.md。
+Hook 原始事件、真实会话/工具标识、宿主路径、串口日志、报告和镜像不提交。传输只使用连接内别名和状态；配对码、日常凭证和 TLS 私钥只留本地。真实网络配对仅在隔离固件开启，稳定配置默认关闭；未启用 NVS 加密，不执行不可逆 eFuse 配置。提交边界见根目录 CONTRIBUTING.md。
