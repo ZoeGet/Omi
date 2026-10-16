@@ -60,7 +60,7 @@ python Tools/CodexMonitor/make_hooks.py --collector $monitorCollectorPath
 | 状态 | 含义 |
 | --- | --- |
 | `working` | 有尚未结束的已观测轮次 |
-| `waitingApproval` | 存在已观测的待确认审批 |
+| `waitingApproval` | 存在已观测的待审批或待选项回复 |
 | `idle` | 已观测轮次收到结束/中断，且没有其他未结束轮次 |
 | `offline` | 收到 `SessionEnd` |
 | `unknown` | 来源不足、关联不明或缺失必要标识 |
@@ -85,7 +85,9 @@ python Tools/CodexMonitor/make_hooks.py --collector $monitorCollectorPath
 | `sourceState=readable` | 文件可读，不代表 Codex 或采集器在线 |
 | `liveness=unverified` | 当前没有持续存活证据 |
 
-默认未设置新鲜度策略，各会话显示 `unknown`，不会将历史红/黄/绿作为当前状态。未来调用方可显式传入正数 `--max-age-seconds` 作为观测有效期，工具不选择默认值。测试中的 10 秒仅为合成边界测试，不是部署建议。有效期内也只代表近期观测，不能证明进程仍在运行。
+CLI 默认未设置新鲜度策略，各会话显示 `unknown`，不会将历史红/黄/绿作为当前状态。调用方可显式传入正数 `--max-age-seconds`；测试中的 10 秒仅为合成边界测试。`read_bound_view` 保持该保守行为。桌面专用 `LifecycleReader` 只在近期、精确事件证明且宿主存活时接纳生命周期；后续没有新 Hook 仍保持工作/等待，独立评估传输有效期，不改写事件时间。来源不可读、身份/证明变化或宿主失效会清除接纳记录，重开监控不会接纳过期历史。它不证明具体聊天存活；漏掉 Stop 而宿主仍存活时可能保留旧状态。
+
+`request_user_input` 的 Pre/Post 对应等待/回复完成；`request_user_input_async` 的 Post 只表示窗口已创建，等待需保留到 `UserPromptSubmit` 中对应 `send_user_message_question_reply` / `questionItemId` 回复，或中断/会话结束。待回复跨 Stop 保留，防止创建选项后结束本轮便错误变绿；其他工具调用与无关联文本不清除它。自由输入选项使用同一回复关联，不保存问题、选项或回答文本。该应用回复格式来自本机实测，非通用 Hooks 稳定协议；格式改变需重新验证。[官方 Hooks 文档](https://learn.chatgpt.com/docs/hooks) 的工具返回事件不能等同异步人工回复。
 
 每个会话分别计算年龄，不使用全局快照生成时间刷新其他聊天。超期、未来时间、缺少时区或非法记录均显示未知；静默不会产生 `Stop`、`idle` 或 `offline`。汇总保留等待审批、工作、未知、空闲、离线的优先级，未知会阻止仅凭另一个空闲会话显示全局空闲。
 
