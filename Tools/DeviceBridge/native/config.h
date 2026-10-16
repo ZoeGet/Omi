@@ -1,0 +1,1 @@
+#define MBEDTLS_ECJPAKE_C

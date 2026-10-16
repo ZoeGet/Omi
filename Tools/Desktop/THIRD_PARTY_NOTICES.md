@@ -14,6 +14,8 @@ This application uses packages from their official npm / crates.io distributions
 | Vitest | https://github.com/vitest-dev/vitest | MIT |
 | Testing Library | https://github.com/testing-library | MIT |
 | jsdom | https://github.com/jsdom/jsdom | MIT |
+| websocket-client 1.9.2 | https://github.com/websocket-client/websocket-client | Apache-2.0 |
+| Mbed TLS 2.28.7 (EC J-PAKE native helper) | https://github.com/Mbed-TLS/mbedtls/tree/v2.28.7 | Apache-2.0 OR GPL-2.0-or-later; distributed under Apache-2.0 |
 
 System fonts (Segoe UI / Microsoft YaHei UI) are referenced by name and are not bundled. Windows WebView2 is a separate Microsoft runtime. Portable packages include dependency license texts; no remote release has been published.
 
