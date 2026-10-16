@@ -109,25 +109,25 @@ export default function App() {
           className={page === item.id ? 'nav selected' : 'nav'} onClick={() => setPage(item.id)}
           aria-current={page === item.id ? 'page' : undefined}>{item.title}</Button>)}</nav>
         <div className="sidebar-bottom"><span className="pilot-label">OMIPET DESKTOP · 0.2</span>
-          <strong>你的桌面，随心而亮。</strong><small>{device.demo ? '演示模式 · 模拟设备' : 'USB 设备控制'}</small></div>
+          <strong>你的桌面，随心而亮。</strong><small>{device.demo ? '演示模式 · 模拟设备' : 'USB / Wi-Fi 设备控制'}</small></div>
       </aside>
       <div className="workspace">
         <header className="topbar"><span>设备工作台 <span className="breadcrumb">/ OmiPet</span></span>
-          <div className="header-status"><Chip label={device.demo ? '演示模式' : 'USB'} size="small" variant="outlined" />
+          <div className="header-status"><Chip label={device.demo ? '演示模式' : connected && device.transport === 'wifi' ? 'Wi-Fi' : 'USB'} size="small" variant="outlined" />
             <span><i className={connected ? 'connection-dot online' : 'connection-dot'} />{busy ? '处理中…' : connected ? '已连接' : '未连接'}</span>
           </div></header>
         <main>
           <div className="page-heading"><div><h1>{heading.title}</h1><p>{heading.caption}</p></div>
             <Chip label={device.demo ? '模拟设备' : '语音始终优先'} size="small" className="demo-chip" /></div>
           {page === 'overview' && <div className="overview-grid">
-            <Card title="设备连接" caption="USB 直连 · 能力与状态以设备回执为准">
-              <div className="port-row"><Select value={settings.port} displayEmpty size="small" fullWidth
+            <Card title="设备连接" caption="USB 直连，或从无线配对页连接已保存设备">
+              {connected && device.transport === 'wifi' ? <Typography sx={{ overflowWrap: 'anywhere', mb: 2 }}>{device.endpoint}</Typography> : <div className="port-row"><Select value={settings.port} displayEmpty size="small" fullWidth
                 disabled={!canConfigure} inputProps={{ 'aria-label': 'USB 串口' }}
                 onChange={event => device.settingsChanged({ port: event.target.value })}>
                 <MenuItem value="">{device.ports.length ? '请选择串口' : '未找到串口'}</MenuItem>
                 {device.ports.map(port => <MenuItem key={port.device} value={port.device}>
                   <CableOutlined fontSize="small" className="inline-icon" />{port.device} · {port.description}</MenuItem>)}
-              </Select><Button disabled={!canConfigure} onClick={() => void device.refresh()}>刷新</Button></div>
+              </Select><Button disabled={!canConfigure} onClick={() => void device.refresh()}>刷新</Button></div>}
               <div className="button-row"><Button variant="contained" fullWidth disabled={!canConfigure || !settings.port || !settings.root || !settings.bindings}
                 onClick={() => void device.send('connect', settings)}>连接设备</Button>
                 <Button variant="outlined" fullWidth disabled={!connected || busy} onClick={() => void device.send('disconnect')}>断开连接</Button></div>
@@ -142,7 +142,7 @@ export default function App() {
                 </label>)}</div>
               <Typography variant="body2" color="textSecondary">{connected && !monitorReady ? '当前固件不支持监控灯光规则。' : '监控中锁定手动调灯，语音可立即接管。'}</Typography>
             </Card>
-            <Card title="监控状态" caption="显示最近一次设备确认的状态">
+            <Card title="监控状态" caption={device.transport === 'wifi' ? '本连接已确认的状态；同时监控时 USB 优先' : '显示最近一次设备确认的状态'}>
               <div className="status-display"><span className="status-orb" style={{ color: display.color, backgroundColor: `${display.color}16` }}>●</span>
                 <div><h3 role="status">{display.title}</h3><p>{display.note}</p></div></div>
               <div className="legend">{(['idle', 'working', 'waitingApproval'] as const).map(key =>
@@ -192,19 +192,22 @@ export default function App() {
           </div>}
           {page === 'pairing' && <div className="detail-stack"><Card title="添加设备" caption="设备与电脑连接同一 Wi-Fi 后，输入屏幕上的地址和配对码">
             <div className="setting-row"><TextField label="设备地址" placeholder="例如 192.168.1.20" fullWidth size="small"
-              value={address} disabled={busy} onChange={event => setAddress(event.target.value)} /></div>
+              value={address} disabled={busy || connected} onChange={event => setAddress(event.target.value)} /></div>
             <div className="setting-row"><TextField label="六位配对码" type="password" fullWidth size="small" value={pairingCode}
-              disabled={busy} autoComplete="off" slotProps={{ htmlInput: { inputMode: 'numeric', maxLength: 6 } }}
+              disabled={busy || connected} autoComplete="off" slotProps={{ htmlInput: { inputMode: 'numeric', maxLength: 6 } }}
               onChange={event => setPairingCode(event.target.value.replace(/\D/g, '').slice(0, 6))} />
-              <Button variant="contained" disabled={!device.ready || device.demo || busy || !address.trim() || pairingCode.length !== 6}
+              <Button variant="contained" disabled={!device.ready || device.demo || busy || connected || !address.trim() || pairingCode.length !== 6}
                 onClick={() => { void device.send('pair', { address: address.trim(), code: pairingCode }); setPairingCode(''); }}>配对</Button></div>
             <Typography variant="body2" color="textSecondary">配对码 5 分钟有效，最多 5 次错误。仅未配对设备在启动时开放；过期后请重启设备。</Typography>
           </Card><Card title="已保存设备" caption="验证连接会核对设备身份，不改变灯光模式">
             {pairedDevices.length ? pairedDevices.map(item => <div className="setting-row" key={item.address}>
               <Typography variant="body2" sx={{ flex: 1, overflowWrap: 'anywhere' }}>{item.address}<br />{item.confirmed ? '已配对' : '等待最后确认，可验证连接恢复'}</Typography>
-              <Button disabled={busy} onClick={() => void device.send('verify-wireless', { address: item.address })}>验证连接</Button>
+              <Button disabled={!canConfigure} onClick={() => void device.send('verify-wireless', { address: item.address })}>验证连接</Button>
+              <Button variant="contained" disabled={!canConfigure || !item.confirmed} onClick={() => {
+                void device.send('connect-wireless', { ...settings, port: item.address }); setPage('overview');
+              }}>无线连接</Button>
             </div>) : <Typography variant="body2" color="textSecondary">尚无已保存的无线设备。</Typography>}
-            <Typography variant="body2" color="textSecondary">当前先验证无线配对与重连；灯光和监控控制仍使用 USB。</Typography>
+            <Typography variant="body2" color="textSecondary">连接后可使用灯光与 Codex 监控。USB 监控优先，语音可立即接管；无线健康页仅显示通信结果。</Typography>
           </Card></div>}
           {page === 'diagnostics' && <div className="detail-stack">
             <Card title="通信与设备健康" caption="本次连接内的汇总，不保存原始会话内容">

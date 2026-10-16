@@ -82,7 +82,7 @@ class Backend:
             return [] if self.demo else PairingStore().devices()
         if action in ("pair", "verify-wireless"):
             fields = {"address", "code"} if action == "pair" else {"address"}
-            if (self.demo or self.busy or self.pairing_worker and self.pairing_worker.is_alive()
+            if (self.demo or self.busy or self.connected or self.pairing_worker and self.pairing_worker.is_alive()
                     or not isinstance(body, dict) or set(body) != fields
                     or any(not isinstance(value, str) or "\0" in value for value in body.values())):
                 raise ValueError("invalid-pairing-request")
@@ -119,16 +119,21 @@ class Backend:
         if action == "close":
             self.close()
             return None
-        if action == "connect":
+        if action in ("connect", "connect-wireless"):
             if self.worker and self.worker.is_alive():
                 raise ValueError("connection-already-open")
             if (not isinstance(body, dict) or set(body) != {"port", "root", "bindings"}
                     or any(not isinstance(value, str) or not value or "\0" in value for value in body.values())):
                 raise ValueError("invalid-connection-settings")
-            if body["port"] not in {port["device"] for port in self.ports()}:
+            wireless = action == "connect-wireless"
+            if wireless:
+                from wireless_pairing import PairingStore, endpoint
+                if self.demo or self.busy or not PairingStore().load(endpoint(body["port"])):
+                    raise ValueError("wireless-pairing-required")
+            elif body["port"] not in {port["device"] for port in self.ports()}:
                 raise ValueError("port-not-found")
             self.worker = DeviceWorker(self.events, port=body["port"], root=Path(body["root"]),
-                                       bindings=Path(body["bindings"]), demo=self.demo)
+                                       bindings=Path(body["bindings"]), demo=self.demo, wireless=wireless)
             self.busy = True
             self.worker.start()
             return None
@@ -154,7 +159,7 @@ class Backend:
                     or not isinstance(message["action"], str)):
                 raise ValueError("invalid-request")
             action, body = message["action"], message["body"]
-            if action not in ("connect", "light", "pair", "verify-wireless") and body is not None:
+            if action not in ("connect", "connect-wireless", "light", "pair", "verify-wireless") and body is not None:
                 raise ValueError("unexpected-body")
             result = dict(ok=True, result=self.dispatch(action, body))
         except Exception as error:

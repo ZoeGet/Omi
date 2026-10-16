@@ -185,3 +185,16 @@ def open_usb(port, root, bindings):
     except Exception:
         stream.close()
         raise
+
+
+def open_wifi(address, root, bindings):
+    from wss_stream import WssStream
+    stream = WssStream(address, timeout=TIMEOUT_SECONDS)
+    client = UsbClient(stream, Limits(MAX_JSON_BYTES, MAX_SESSIONS), timeout_seconds=TIMEOUT_SECONDS, retries=RETRIES)
+    try:
+        session = ControlSession(client, monitor_reader(root, bindings), stream.open)
+        session.connect()
+        return session, stream, None
+    except Exception:
+        stream.close()
+        raise

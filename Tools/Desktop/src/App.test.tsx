@@ -30,6 +30,21 @@ beforeEach(() => {
 });
 
 describe('USB desktop', () => {
+  it('connects a saved wireless device and uses the shared controls', async () => {
+    bridge.invoke.mockImplementation(async (_command, { message }) => ({ ok: true,
+      result: message.action === 'init' ? { demo: false, root: 'C:/state', bindings: 'C:/binding.json', ports: [] }
+        : message.action === 'paired-devices' ? [{ address: 'wss://192.0.2.1:8443/pair', confirmed: true }] : null,
+      events: bridge.events.splice(0) }));
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: '无线配对' }));
+    await user.click(await screen.findByRole('button', { name: '无线连接' }));
+    expect(bridge.invoke.mock.calls.some(([, args]) => args.message.action === 'connect-wireless'
+      && args.message.body.port === 'wss://192.0.2.1:8443/pair')).toBe(true);
+    bridge.events.push({ kind: 'connected', port: 'wss://192.0.2.1:8443/pair', transport: 'wifi' }, status());
+    await waitFor(() => expect(screen.getByText('Wi-Fi')).toBeTruthy());
+    expect((screen.getByRole('switch', { name: '本地灯光' }) as HTMLInputElement).disabled).toBe(false);
+  });
   it('clears the pairing code on submit and waits for the backend result', async () => {
     const user = userEvent.setup();
     render(<App />);

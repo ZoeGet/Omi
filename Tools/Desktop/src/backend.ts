@@ -13,15 +13,23 @@ export type Snapshot = {
 export type WorkerEvent = Partial<Snapshot> & {
   kind: string; port?: string; ok?: boolean; command?: string; error?: string;
   releaseConfirmed?: boolean; monitorOff?: boolean;
+  transport?: 'usb' | 'wifi';
 };
 type Reply = { ok: boolean; result?: unknown; error?: string; events: WorkerEvent[] };
 type State = {
   ready: boolean; connected: boolean; busy: boolean; demo: boolean;
   ports: Port[]; settings: Settings; snapshot: Partial<Snapshot>; notice: string; logs: string[];
+  transport?: 'usb' | 'wifi'; endpoint?: string;
 };
 const errors: Record<string, string> = {
   'monitor-mode-active': '监控模式已锁定手动灯光，请先切回本地模式。',
   'voice-active': '设备正在响应语音，请稍后再应用灯光。',
+  'usb-priority': 'USB 连接优先，请先断开 USB 控制再通过无线调灯。',
+  'wireless-pairing-required': '请先在无线配对页保存此设备。',
+  'wireless-authentication-failed': '无线设备认证失败，请检查网络和已保存的设备地址。',
+  'wireless-disconnected': '无线连接已断开，等待重新连接。',
+  'wireless-send-failed': '无线发送失败，请检查设备网络。',
+  'wireless-receive-failed': '无线接收失败，请检查设备网络。',
   'device-not-ready': '设备尚未就绪，请等待当前操作完成。',
   'port-not-found': '串口已断开，请刷新后重新选择。',
   'light-command-not-supported': '当前固件未提供手动灯光控制。',
@@ -42,7 +50,7 @@ export function applyEvents(state: State, events: WorkerEvent[]): State {
   for (const event of events) {
     switch (event.kind) {
       case 'connected':
-        state = log({ ...state, connected: true, busy: false }, `已连接 ${event.port}，设备握手成功。`);
+        state = log({ ...state, connected: true, busy: false, transport: event.transport ?? 'usb', endpoint: event.port }, `已连接 ${event.port}，设备握手成功。`);
         break;
       case 'status':
         if (state.snapshot.monitorRequested && !event.monitorRequested && event.state?.mode === 'local') {

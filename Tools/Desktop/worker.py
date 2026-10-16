@@ -2,16 +2,17 @@ import queue
 import threading
 import time
 
-from controller import ControlSession, SimulatedClient, demo_reader, open_usb
+from controller import ControlSession, SimulatedClient, demo_reader, open_usb, open_wifi
 
 
 class DeviceWorker(threading.Thread):
-    def __init__(self, events, *, port, root, bindings, demo=False):
+    def __init__(self, events, *, port, root, bindings, demo=False, wireless=False):
         super().__init__(name="OmiPet device", daemon=False)
         self.events = events
         self.commands = queue.Queue(maxsize=1)
         self.stopping = threading.Event()
         self.port, self.root, self.bindings, self.demo = port, root, bindings, demo
+        self.wireless = wireless
         self.session = self.stream = self.health = None
 
     def submit(self, command, payload=None):
@@ -36,8 +37,9 @@ class DeviceWorker(threading.Thread):
                 self.session = ControlSession(SimulatedClient(), demo_reader)
                 self.session.connect()
             else:
-                self.session, self.stream, self.health = open_usb(self.port, self.root, self.bindings)
-            self.publish("connected", port=self.port, demo=self.demo)
+                connect = open_wifi if self.wireless else open_usb
+                self.session, self.stream, self.health = connect(self.port, self.root, self.bindings)
+            self.publish("connected", port=self.port, demo=self.demo, transport="wifi" if self.wireless else "usb")
             self.status()
             next_tick = time.monotonic() + 1
             while not self.stopping.is_set():
