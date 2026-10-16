@@ -61,3 +61,5 @@ python verify_usb.py --backend build/helper/omi-device/omi-device.exe --port COM
 2026-10-16 生命周期修复：171 项 Python、6 项界面测试及 Windows 打包通过。COM17 实测 60 秒内 56 次 ACK 均为 working，最长约 40 秒无新事件仍保持 working，零超时/解码错误，退出释放确认；另一轮选项窗口有 38 次 waitingApproval ACK 与扩散灯切换日志，但末尾发生 1 次 USB 短断线，随后重连关闭确认。真实选项回复 Hook 已确认待回复数 1→0、状态恢复 working。随后复测 60 秒有 55 次 ACK，确认 working→waitingApproval→working，用户目视确认黄色扩散；零超时/解码错误、link_losses 未新增，关闭释放确认。回复后红色目视尚未单独确认；未修改或烧录固件，USB 长期稳定性仍待查。
 
 界面实现参考：[Clash Verge Rev](https://github.com/clash-verge-rev/clash-verge-rev/blob/main/src/pages/home.tsx) 的 Tauri/React/MUI 与 Grid、[CC Switch](https://github.com/farion1231/cc-switch/blob/main/src/App.tsx) 的 Flex/滚动布局。没有复制其业务代码。
+
+2026-10-16 USB 修复：桥接器在外部预连接、首轮会话重建后也会重新握手并确认退出释放；88 项桥接、16 项桌面测试及 Windows 打包通过。用户确认并刷入 20 ms 信号过滤隔离固件，30 分钟 1613 次更新全部确认，过滤 9 次短脉冲，无断线/重连/超时/解码/音频队列/WDT异常，关闭释放确认。新鲜度、1 秒周期、2 秒超时、1 次重试和 5 秒租约未改。另有 3 次临时 `unknown` 尚未定位；来源异常按约定仍显示绿，不能据此宣称红绿状态完全稳定，目视及物理拔线待补。日志/镜像/回退只留本地，原始模型与词表 7 个文件内容哈希与备份一致。

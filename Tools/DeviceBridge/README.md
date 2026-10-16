@@ -12,7 +12,7 @@
 
 ## 当前行为与验证边界
 
-当前设备已恢复诊断前原应用，支持手动灯光、监控扩散灯和语音优先；来源未知/无事件/完成显示绿，工作红、待审批黄，监控断联或租约结束关灯。换珠后红白黄均经用户目视确认。默认 `Firmware/platformio.ini` 仍关闭协议实验，不能拿默认镜像替代当前设备的上位机固件。
+当前设备已授权刷入 20 ms 连接信号过滤的隔离 USB 应用，支持手动灯光、监控扩散灯和语音优先；来源未知/无事件/完成显示绿，工作红、待审批或回复黄，监控断联或租约结束关灯。换珠后红白黄均经用户目视确认。默认 `Firmware/platformio.ini` 仍关闭协议实验，不能拿默认镜像替代当前设备的上位机固件。
 
 此前冻结后台有 21 项 USB 协议检查通过；30 分钟桥接曾发生 7 次恢复性重连。单次正常不能证明 USB 长期稳定。实际波形、完整语音/监控关闭/断联目视验收仍需补齐；原始收据、日志和备份只留本地 `tmp/`。历史实现过程从 Git 历史查看，本文只保留现行接口与必要验证边界。
 
@@ -82,13 +82,19 @@ snapshot 正文包含：
 
 2026-10-15 上位机隔离版增加 `light`：正文严格包含 `effect/red/green/blue/brightness`；effect 为 solid/rainbow/breathe/sweep/centerExpand/off，四个数值字段为 0–255 整数。仅本地模式且未在唤醒等待时接受；监控中返回 `monitor-mode-active`，语音活动中返回 `voice-active`。同序号重试不重复启动动画，失联或 release 不撤销已接受的本地设置，重启仍用原启动灯光。颜色和模式一次更新再绘制，设备自行播放动画，不逐帧传 LED 数据。固件 `OMIPET_DESKTOP_CONTROL` 默认关闭。
 
-Windows 控制中心、实机步骤与最新验证见 [Desktop](../Desktop/README.md)。当前设备已恢复支持上述能力的原 USB 应用，本轮文档整理不刷机；无线认证、WSS、屏幕摘要及完整设备状态读回尚未接入。
+Windows 控制中心、实机步骤与最新验证见 [Desktop](../Desktop/README.md)。当前设备使用支持上述能力及 20 ms 过滤的隔离 USB 应用；无线认证、WSS、屏幕摘要及完整设备状态读回尚未接入。
 
 ## 状态来源与运行参数
 
 CodexMonitor 保存生命周期观测和事件关联宿主证据。CLI 默认仍使用事件年龄预算。桌面监控通过 `LifecycleReader` 接纳近期且宿主存活的 schema 2 事件证明，随后延续同一生命周期，收到结束事件才结束；不会将长时间无新事件误当成完成。旧事件时间与年龄保留不变，每轮独立校验的评估使用原有 30 秒预算，扣除 8 秒传输余量；设备挑战还会扣除心跳到快照的耗时，缓存评估不能自行续期。重开监控不接纳过期历史状态，来源/绑定/进程失效则清除延续资格。心跳不生成业务事件，`sourceLiveness` 仍为 `unverified`；遗漏 Stop 且宿主仍存活时无法独立确认聊天已结束。协议 unknown 不等同 idle，`waitingApproval` 同时覆盖待审批与待用户选项回复。
 
 已确认实机预算：最大 JSON 4096 字节、最多 16 会话、深度 8、每轮接收 64 字节、USB TX 缓冲 8192 字节、写等待 1 ms、租约 5000 ms。桌面通信周期 1 秒、超时 2 秒、最多重试 1 次。修改预算或调度前按项目协作规则确认，不能照搬测试中的合成阈值。
+
+短断线排查：旧日志有无总线重置、无协议超时的毫秒级 `isPlugged()` 低信号，旧传输层会立即清除会话。[Espressif HWCDC 源码](https://github.com/espressif/arduino-esp32/blob/master/cores/esp32/HWCDC.cpp) 也说明 SOF 检测可短时翻转；这不能单独证明物理线缆稳定。可选 `--link-grace-ms` 只用于隔离构建，必须显式指定正数且小于租约；默认 `OMIPET_PROTOCOL_LINK_GRACE_MS=0` 保持即时断开。宽限期内暂停收发、不续租；恢复后只延续尚未过期的原会话，达到边界仍断开并拒绝旧连接请求。`filtered_link_gaps` 与确认断开的 `link_losses` 分别计数。用户已确认 20 ms 并授权烧录，现有 SOF 修补和稳定默认配置保持不变。
+
+2026-10-16：COM17 上 30 分钟共 1613 次状态更新全部确认，过滤 9 次短脉冲，最长记录 6 ms；断线/重连/总线重置/写失败均未新增，零超时/解码错误、无音频队列或看门狗异常，关闭释放确认。实验固件 RAM 66520 / Flash 1549229 字节，5 MiB 模型随 5 个镜像校验烧录；默认构建 RAM 57896 / Flash 1532693 字节通过且未刷入。另有 3 次 `unknown`，尚未确定状态来源原因，不能将 USB 连续性通过等同于状态/灯效全部稳定；物理拔线与完整红绿目视待补。
+
+上位机退出释放补充：桌面控制器先完成连接，再创建桥接器；首轮遇到连接重建后，桥接器的连接计数可能仍为零。释放判断现在也检查是否尝试过运行周期，避免跳过重新握手与释放。没有启动的桥接器仍不打开串口。合成回归及 COM17 注入主机会话丢失的重新握手/关闭检查通过，不能据此宣称底层短断线已修复。
 
 桌面程序复用 `Desktop/controller.py` 和 `worker.py`，不安装自动后台服务。CLI 默认只传 unknown；显式的状态显示需同时给出有效期、宿主绑定及 `--monitor-lights`。例如在仓库根目录执行已确认的 60 秒前台实验：
 
@@ -112,7 +118,7 @@ python Tools/DeviceBridge/demo.py --max-json-bytes 4096 --max-sessions 16 --leas
 隔离配置生成器只写新配置，不构建、不刷机；在仓库根目录运行：
 
 ```powershell
-python Tools/DeviceBridge/tests/create_experiment_config.py --output tmp/desktop-protocol.ini --build-dir Firmware/.pio/desktop-protocol --max-json-bytes 4096 --rx-bytes-per-loop 64 --max-json-depth 8 --usb --max-sessions 16 --lease-ms 5000 --tx-buffer-bytes 8192 --write-wait-ms 1 --sof-reset-fix --freshness-challenge --monitor-lights --monitor-green-off --desktop-control
+python Tools/DeviceBridge/tests/create_experiment_config.py --output tmp/desktop-protocol.ini --build-dir Firmware/.pio/desktop-protocol --max-json-bytes 4096 --rx-bytes-per-loop 64 --max-json-depth 8 --usb --max-sessions 16 --lease-ms 5000 --tx-buffer-bytes 8192 --write-wait-ms 1 --sof-reset-fix --freshness-challenge --monitor-lights --monitor-green-off --desktop-control --link-grace-ms 20
 pio run -d Firmware -c (Resolve-Path tmp/desktop-protocol.ini)
 ```
 
