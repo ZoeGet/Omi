@@ -4,6 +4,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 import subprocess
 import time
 
@@ -58,6 +59,7 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(stream.device.snapshot["overallStatus"], "unknown")
         self.assertEqual(stream.device.snapshot["validForMs"], 0)
         self.assertEqual(bridge.report["nonUnknownSnapshotCycles"], 0)
+        self.assertEqual(bridge.report["unknownReasons"], {"fresh-display-unavailable": 1})
         self.assertEqual(bridge.report["acknowledgedDeviceDisplays"], {"unknown": 1})
         self.assertNotIn(b"PRIVATE_PROMPT", b"".join(stream.writes))
 
@@ -104,8 +106,39 @@ class BridgeTests(unittest.TestCase):
             self.assertEqual(bridge.report["nonUnknownSnapshotCycles"], 2)
             self.assertEqual(bridge.report["acknowledgedDeviceDisplays"], {"working": 2, "unknown": 1})
             self.assertIsNotNone(bridge.report["firstUnknownAckAfterNonUnknownAtUtc"])
+            self.assertEqual(bridge.report["unknownReasons"], {"delivery-budget-exhausted": 1})
             self.assertNotIn(b"PRIVATE_SESSION_ID", b"".join(stream.writes))
             self.assertNotIn(b"PRIVATE_PROMPT", b"".join(stream.writes))
+
+    def test_unknown_reason_diagnostics_are_bounded_and_do_not_copy_private_fields(self):
+        source = view(status="unknown")
+        source["sessions"][0]["reason"] = "event-binding-unconfirmed"
+        stream, bridge = self.setup_bridge(lambda: source)
+        self.assertTrue(bridge.step())
+        self.assertEqual(bridge.report["unknownReasons"], {"event-binding-unconfirmed": 1})
+        self.assertEqual(bridge.report["lastUnknownSnapshot"]["reasons"], {"event-binding-unconfirmed": 1})
+        source["sessions"][0]["reason"] = "PRIVATE_PROMPT"
+        self.assertTrue(bridge.step())
+        self.assertEqual(bridge.report["unknownReasons"], {"event-binding-unconfirmed": 1, "unclassified": 1})
+        self.assertNotIn("PRIVATE_PROMPT", json.dumps(bridge.report))
+        self.assertNotIn("PRIVATE_SESSION_ID", json.dumps(bridge.report))
+        self.assertNotIn("snapshots", bridge.report)
+
+    def test_device_unknown_is_distinguished_from_source_unknown(self):
+        source = dict(view(), bindingState="event-correlated", evaluatedAtMonotonicNs=str(time.monotonic_ns()))
+        stream, bridge = self.setup_bridge(lambda: source)
+        stream.device = DeviceSimulator(Limits(4096, 16), lease_ms=1000, freshness_challenge=True)
+        bridge.allow_fresh_display, bridge.delivery_reserve_seconds = True, 8
+        request = bridge.client.request
+        def device_unknown(kind, body):
+            reply = request(kind, body)
+            if kind == "snapshot":
+                self.assertEqual(body["overallStatus"], "working")
+                reply["state"]["displayStatus"] = "unknown"
+            return reply
+        with patch.object(bridge.client, "request", side_effect=device_unknown):
+            self.assertTrue(bridge.step())
+        self.assertEqual(bridge.report["unknownReasons"], {"device-display-unknown": 1})
 
     def test_legacy_binding_cannot_enable_fresh_device_display(self):
         stream = Stream()

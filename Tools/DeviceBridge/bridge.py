@@ -18,6 +18,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "CodexMonitor"))
 from state_view import read_bound_view, read_view
 
 
+SOURCE_REASONS = frozenset(("invalid-session", "invalid-timestamp", "future-timestamp", "source-unavailable",
+    "freshness-policy-unset", "observation-expired", "invalid-process-bindings", "process-binding-missing",
+    "event-binding-unconfirmed", "event-clock-invalid", "source-unavailable-or-budget-unset",
+    "bound-process-unconfirmed", "observed-lifecycle", "source-lock-unavailable",
+    "within-explicit-budget", "within-monotonic-budget"))
+
+
 def positive_seconds(value):
     try:
         result = float(value)
@@ -131,6 +138,7 @@ class Bridge:
         self.delivery_reserve_seconds = delivery_reserve_seconds
         self.mapper = SnapshotMapper()
         self.previous = None
+        self.unknown_reasons = {}
         self.report = dict(observationsOnly=True, physicalLedControl=False,
                            freshnessPolicy=("explicit-bound-reserved" if allow_fresh_display
                                             else "unset-display-unknown"), connections=0, cycles=0,
@@ -141,6 +149,7 @@ class Bridge:
                            lastDisplayedCounts={}, nonUnknownSnapshotCycles=0,
                            acknowledgedDeviceDisplays={}, firstNonUnknownAckAtUtc=None,
                            firstUnknownAckAfterNonUnknownAtUtc=None,
+                           unknownReasons={}, lastUnknownSnapshot=None,
                            lastDeviceState=None, releaseConfirmed=False, stoppedBy=None)
 
     def _connect(self):
@@ -155,6 +164,7 @@ class Bridge:
 
     def _body(self):
         problem = None
+        display_policy = None
         try:
             view = self.reader()
             state = view.get("sourceState", "invalid")
@@ -163,6 +173,7 @@ class Bridge:
             if (not self.allow_fresh_display or not self.client.host.freshness_challenge
                     or view.get("bindingState") != "event-correlated"
                     or "evaluatedAtMonotonicNs" not in view):
+                display_policy = "fresh-display-unavailable"
                 view = dict(view, maxAgeSeconds=None,
                             sessions=[dict(entry, displayStatus="unknown") for entry in view["sessions"]])
             body = self.mapper.convert(view, self.client.host.limits, now=self.wall_clock(),
@@ -201,6 +212,20 @@ class Bridge:
         if latest is not None and (prior is None or latest > prior):
             self.report["observationTimestampAdvances"] += 1
             self.report["latestObservationAtUtc"] = latest
+        reasons = Counter()
+        if body["overallStatus"] == "unknown":
+            for entry in view["sessions"]:
+                if entry.get("displayStatus") == "unknown":
+                    reason = entry.get("reason")
+                    reasons[reason if isinstance(reason, str) and reason in SOURCE_REASONS
+                            else (display_policy if reason is None and display_policy else "unclassified")] += 1
+            source_reason = view.get("sourceReason")
+            if isinstance(source_reason, str) and source_reason in SOURCE_REASONS:
+                reasons[source_reason] += 1
+            if not reasons:
+                reasons[problem or display_policy or ("source-" + state if state != "readable"
+                                                      else "delivery-budget-exhausted")] += 1
+        self.unknown_reasons = dict(reasons)
         return body
 
     def step(self):
@@ -228,6 +253,14 @@ class Bridge:
             device_display = reply["state"]["displayStatus"]
             displays = self.report["acknowledgedDeviceDisplays"]
             displays[device_display] = displays.get(device_display, 0) + 1
+            if device_display == "unknown":
+                reasons = (self.unknown_reasons if body["overallStatus"] == "unknown"
+                           else {"device-display-unknown": 1})
+                counts = Counter(self.report["unknownReasons"])
+                counts.update(reasons)
+                self.report["unknownReasons"] = dict(counts)
+                self.report["lastUnknownSnapshot"] = dict(atUtc=self.wall_clock().isoformat(),
+                                                          reasons=reasons)
             if device_display != "unknown" and self.report["firstNonUnknownAckAtUtc"] is None:
                 self.report["firstNonUnknownAckAtUtc"] = self.wall_clock().isoformat()
             elif (device_display == "unknown" and self.report["firstNonUnknownAckAtUtc"] is not None
