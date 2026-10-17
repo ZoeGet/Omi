@@ -122,6 +122,45 @@ describe('USB desktop', () => {
     expect((screen.getByRole('switch', { name: '本地灯光' }) as HTMLInputElement).disabled).toBe(true);
   });
 
+  it('edits every monitor state, waits for save ACK, and protects concurrent changes', async () => {
+    const profile = { revision: 4, profiles: Object.fromEntries(['working', 'waitingApproval', 'idle', 'unknown', 'offline'].map(status =>
+      [status, { effect: 'centerExpand', red: 0, green: 255, blue: 0, brightness: 16 }])) };
+    render(<App />);
+    const user = await connect(status({ operations: ['light', 'monitorProfile'], monitorProfile: profile }));
+    await user.click(screen.getByRole('button', { name: '监控灯效' }));
+    await screen.findByText('运行中');
+    expect(screen.getAllByRole('slider')).toHaveLength(5);
+    const button = screen.getByRole('button', { name: '保存监控灯效到设备' }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    for (const slider of screen.getAllByRole('slider')) fireEvent.change(slider, { target: { value: 0 } });
+    fireEvent.change(screen.getByLabelText('运行中颜色'), { target: { value: '#FF00FF' } });
+    expect(bridge.invoke.mock.calls.some(([, args]) => args.message.action === 'monitor-profile')).toBe(false);
+    await user.click(button);
+    const submitted = bridge.invoke.mock.calls.find(([, args]) => args.message.action === 'monitor-profile')![1].message.body;
+    expect(submitted.revision).toBe(4);
+    expect(submitted.profiles.working.red).toBe(255);
+    for (const entry of Object.values(submitted.profiles) as { brightness: number }[]) expect(entry.brightness).toBe(0);
+    expect(screen.queryByText('监控灯效已保存到设备，重启后保留。')).toBeNull();
+    bridge.events.push({ kind: 'command', command: 'monitor-profile', ok: true }, status({ operations: ['light', 'monitorProfile'], monitorProfile: { ...submitted, revision: 5 } }));
+    await waitFor(() => expect(screen.getByText('监控灯效已保存到设备，重启后保留。')).toBeTruthy());
+    await waitFor(() => expect(button.disabled).toBe(true));
+    fireEvent.change(screen.getByLabelText('运行中亮度'), { target: { value: 255 } });
+    bridge.events.push(status({ operations: ['light', 'monitorProfile'], monitorProfile: { ...submitted, revision: 6 } }));
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy());
+    expect(button.disabled).toBe(true);
+    await user.click(screen.getByRole('button', { name: '重新读取设备配置' }));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+    expect((screen.getByLabelText('运行中亮度') as HTMLInputElement).value).toBe('0');
+  });
+
+  it('keeps monitor profile editing disabled on older firmware', async () => {
+    render(<App />);
+    const user = await connect();
+    await user.click(screen.getByRole('button', { name: '监控灯效' }));
+    expect(screen.getByText('当前固件不支持保存监控灯效，请升级固件。')).toBeTruthy();
+    expect((screen.getByRole('button', { name: '保存监控灯效到设备' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it('keeps browser previews away from device controls', () => {
     bridge.native = false;
     render(<App />);

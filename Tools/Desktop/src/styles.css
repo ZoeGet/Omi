@@ -101,3 +101,8 @@ footer { flex-shrink: 0; padding: 12px 28px 15px; color: #8290a4; font-size: 10p
 .diagnostic-grid dd { margin: 7px 0 0; font-size: 16px; }
 .operation-log { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.9; max-height: 320px; overflow: auto; scrollbar-width: thin; }
 @media (max-width: 840px) { .diagnostic-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+.monitor-profile-fields { display: grid; grid-template-columns: auto minmax(120px, 180px) minmax(150px, 1fr); gap: 24px; align-items: center; margin: 18px 0; }
+.monitor-profile-fields label { display: flex; gap: 12px; align-items: center; }
+.monitor-profile-fields input[type="color"] { width: 48px; height: 34px; border: 1px solid #e8edf4; padding: 2px; border-radius: 6px; }
+@media (max-width: 900px) { .monitor-profile-fields { grid-template-columns: 1fr; gap: 12px; } }

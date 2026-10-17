@@ -53,6 +53,10 @@ class DeviceWorker(threading.Thread):
                             self.session.local()
                         elif command == "monitor":
                             self.session.monitor()
+                        elif command == "monitor-profile-read":
+                            self.session.read_monitor_profile()
+                        elif command == "monitor-profile":
+                            self.session.set_monitor_profile(payload)
                         elif command == "light":
                             self.session.light(payload)
                         else:

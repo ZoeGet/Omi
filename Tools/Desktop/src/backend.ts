@@ -4,10 +4,12 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 export type Light = { effect: string; red: number; green: number; blue: number; brightness: number };
 export type Port = { device: string; description: string };
 export type Settings = { port: string; root: string; bindings: string };
-type RequestBody = Settings | Light | { address: string; code?: string } | null;
+export type MonitorProfile = { revision: number; profiles: Record<string, Light> };
+type RequestBody = Settings | Light | MonitorProfile | { address: string; code?: string } | null;
 export type Snapshot = {
   state: { mode: string; displayStatus: string; monitorOutput?: string; leaseActive: boolean } | null;
   monitorRequested: boolean; monitorLights: boolean; monitorGreenOff: boolean; operations: string[];
+  monitorProfile?: MonitorProfile | null;
   lastLight: Light | null; diagnostics: Record<string, number>; health: Record<string, unknown>;
 };
 export type WorkerEvent = Partial<Snapshot> & {
@@ -22,6 +24,10 @@ type State = {
   transport?: 'usb' | 'wifi'; endpoint?: string;
 };
 const errors: Record<string, string> = {
+  'monitor-profile-not-supported': '当前固件不支持保存监控灯效，请升级固件。',
+  'monitor-profile-conflict': '设备配置已被其他连接修改，请重新读取后再保存。',
+  'monitor-profile-save-failed': '设备存储写入失败，监控灯效未确认保存。',
+  'monitor-profile-revision-exhausted': '设备配置版本已用尽，请联系维护者。',
   'monitor-mode-active': '监控模式已锁定手动灯光，请先切回本地模式。',
   'voice-active': '设备正在响应语音，请稍后再应用灯光。',
   'usb-priority': 'USB 连接优先，请先断开 USB 控制再通过无线调灯。',
@@ -40,7 +46,7 @@ const errors: Record<string, string> = {
   'local-mode-unconfirmed': '设备尚未确认退出监控，请重试或断开连接。',
 };
 const errorText = (error: string) => errors[error] ?? `操作失败：${error}`;
-const commands: Record<string, string> = { local: '已切回本地灯光。', monitor: 'Codex 监控已开启。', light: '灯光设置已获设备确认。' };
+const commands: Record<string, string> = { local: '已切回本地灯光。', monitor: 'Codex 监控已开启。', light: '灯光设置已获设备确认。', 'monitor-profile': '监控灯效已保存到设备，重启后保留。', 'monitor-profile-read': '已重新读取设备监控灯效。' };
 
 function log(state: State, text: string): State {
   return { ...state, notice: text, logs: [...state.logs, `${new Date().toLocaleTimeString()}  ${text}`].slice(-200) };

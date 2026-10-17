@@ -19,6 +19,61 @@ class ControllerTests(unittest.TestCase):
         self.control = ControlSession(self.client, demo_reader)
         self.control.connect()
 
+    def test_monitor_profiles_save_readback_conflict_and_failure(self):
+        import copy
+        from protocol import STATUSES, LIGHT_EFFECTS
+        self.assertEqual(set(self.control.monitor_profile["profiles"]), set(STATUSES))
+        self.control.monitor()
+        setting = copy.deepcopy(self.control.monitor_profile)
+        for index, status in enumerate(STATUSES):
+            setting["profiles"][status] = dict(effect=LIGHT_EFFECTS[index], red=index, green=0, blue=255, brightness=index * 60)
+        self.control.set_monitor_profile(setting)
+        self.assertEqual(self.control.state["mode"], "monitor")
+        self.assertEqual(self.control.monitor_profile["revision"], 1)
+        self.assertEqual(self.control.monitor_profile["profiles"], setting["profiles"])
+        self.control.set_monitor_profile(copy.deepcopy(self.control.monitor_profile))
+        self.assertEqual(self.client.device.profile_writes, 1)
+        with self.assertRaisesRegex(ProtocolError, "monitor-profile-conflict"):
+            self.control.set_monitor_profile(setting)
+        current = copy.deepcopy(self.control.monitor_profile)
+        setting = copy.deepcopy(current)
+        setting["profiles"]["working"]["effect"] = "off"
+        self.client.device.profile_save_fails = True
+        with self.assertRaisesRegex(ProtocolError, "monitor-profile-save-failed"):
+            self.control.set_monitor_profile(setting)
+        self.assertEqual(self.control.monitor_profile, current)
+        self.client.device.profile_save_fails = False
+        self.control.connect()
+        self.assertEqual(self.control.monitor_profile, current)
+        self.client.device.monitor_profile["revision"] += 1
+        self.control.monitor()
+        self.assertEqual(self.control.monitor_profile["revision"], 2)
+        self.client.device.yield_monitor_to_voice()
+        self.control.tick()
+        self.assertFalse(self.control.monitor_requested)
+        self.assertEqual(self.control.monitor_profile["revision"], 2)
+
+    def test_profile_validation_old_firmware_and_retry(self):
+        import copy
+        setting = copy.deepcopy(self.control.monitor_profile)
+        for change in (lambda p: p["profiles"].pop("offline"), lambda p: p["profiles"]["idle"].update(brightness=True),
+                       lambda p: p.update(revision=-1), lambda p: p["profiles"]["unknown"].update(effect="bad")):
+            invalid = copy.deepcopy(setting)
+            change(invalid)
+            with self.assertRaises(ProtocolError):
+                self.control.set_monitor_profile(invalid)
+        self.control.operations.remove("monitorProfile")
+        with self.assertRaisesRegex(ProtocolError, "monitor-profile-not-supported"):
+            self.control.set_monitor_profile(setting)
+        self.control.operations.add("monitorProfile")
+        setting["profiles"]["working"]["brightness"] = 0
+        request = self.client.host.prepare("monitorProfile", setting)
+        first = self.client.device.receive(request, self.client.now())
+        second = self.client.device.receive(request, self.client.now())
+        self.assertTrue(second["body"]["duplicate"])
+        self.assertEqual(first["body"]["monitorProfile"], second["body"]["monitorProfile"])
+        self.assertEqual(self.client.device.profile_writes, 1)
+
     def test_manual_control_is_blocked_until_monitor_release(self):
         self.control.monitor()
         self.assertEqual(self.control.state["mode"], "monitor")

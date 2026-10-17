@@ -11,6 +11,7 @@ import SettingsOutlined from '@mui/icons-material/SettingsOutlined';
 import MonitorHeartOutlined from '@mui/icons-material/MonitorHeartOutlined';
 import LinkOutlined from '@mui/icons-material/LinkOutlined';
 import { useDevice } from './backend';
+import { MonitorLights, lightColor, lightDescription, monitorStates } from './MonitorLights';
 
 const theme = createTheme({
   palette: { primary: { main: '#3478f6' }, background: { default: '#f6f8fc' },
@@ -35,6 +36,7 @@ const states = {
 const pages = [
   { id: 'overview', title: '设备概览', icon: <DashboardOutlined />, caption: '让设备状态清晰可见，让每一次控制简单直接。' },
   { id: 'lights', title: '灯光与灯效', icon: <LightModeOutlined />, caption: '一点颜色，一种氛围。为你的桌面设置合适的光。' },
+  { id: 'monitor-lights', title: '监控灯效', icon: <LightModeOutlined />, caption: '为每一种 Codex 状态设置灯效，并保存到设备。' },
   { id: 'pairing', title: '无线配对', icon: <LinkOutlined />, caption: '在同一局域网中，使用设备屏幕上的六位码建立信任。' },
   { id: 'diagnostics', title: '连接诊断', icon: <MonitorHeartOutlined />, caption: '查看通信质量、设备健康和操作结果。' },
   { id: 'settings', title: '设置', icon: <SettingsOutlined />, caption: '指定本机 Codex 状态来源，断开连接后可修改。' },
@@ -79,10 +81,16 @@ export default function App() {
   const editable = active && local && Boolean(snapshot.operations?.includes('light'));
   const monitorReady = snapshot.monitorLights && snapshot.monitorGreenOff;
   const monitorConnected = monitoring && confirmed?.monitorOutput === 'connected';
+  const savedProfiles = snapshot.monitorProfile?.profiles;
   const display = !connected ? { title: '等待连接', color: '#a5b1c3', note: '连接设备后显示实际状态' }
     : !confirmed || monitoring && !monitorConnected ? { title: '连接中断', color: '#a5b1c3', note: '设备检测到断联后关灯，等待重新连接' }
     : !monitoring ? { title: '本地灯光', color: '#3478f6', note: '灯光由手动设置或语音控制' }
-    : states[confirmed.displayStatus as keyof typeof states] ?? states.unknown;
+    : (() => {
+      const status = confirmed.displayStatus;
+      const base = status === 'offline' ? { title: '会话离线', color: '#20a66a', note: '绿色扩散灯' } : states[status as keyof typeof states] ?? states.unknown;
+      const light = savedProfiles?.[status];
+      return light ? { ...base, color: lightColor(light), note: lightDescription(light) } : base;
+    })();
   const percent = Math.round(brightness / 255 * 100);
   const heading = pages.find(item => item.id === page)!;
   const diagnostic = snapshot.diagnostics ?? {};
@@ -146,10 +154,10 @@ export default function App() {
               <div className="status-display"><span className="status-orb" style={{ color: display.color, backgroundColor: `${display.color}16` }}>●</span>
                 <div><h3 role="status">{display.title}</h3><p>{display.note}</p></div></div>
               <div className="legend">{(['idle', 'working', 'waitingApproval'] as const).map(key =>
-                <span key={key}><i style={{ backgroundColor: states[key].color }} />{states[key].title}</span>)}</div>
+                <span key={key}><i style={{ backgroundColor: savedProfiles?.[key] ? lightColor(savedProfiles[key]) : states[key].color }} />{states[key].title}</span>)}</div>
             </Card>
             <Card title="灯光空间" caption="编辑预览，不是设备实时灯光读回">
-              <LightStrip color={monitoring ? display.color : color} off={!connected || !confirmed || monitoring && !monitorConnected || !monitoring && effect === '关闭灯光'} />
+              <LightStrip color={monitoring ? display.color : color} off={!connected || !confirmed || monitoring && (!monitorConnected || savedProfiles?.[confirmed?.displayStatus ?? 'unknown']?.effect === 'off' || savedProfiles?.[confirmed?.displayStatus ?? 'unknown']?.brightness === 0) || !monitoring && effect === '关闭灯光'} />
               <Typography variant="body2" color="textSecondary">{monitoring ? display.note : `${effect} · ${color} · 亮度 ${percent}%`}</Typography>
               <div className="card-action"><Button endIcon={<ArrowForwardRounded />} onClick={() => setPage('lights')}>调整灯光</Button></div>
             </Card>
@@ -181,15 +189,18 @@ export default function App() {
               <Typography variant="body2" color="textSecondary">{effect} · {color} · 亮度 {percent}%</Typography>
             </Card>
             <Card title="监控灯光规则">
-              <ul className="rules">{(['idle', 'working', 'waitingApproval'] as const).map(key => <li key={key}>
-                <i style={{ backgroundColor: states[key].color }} /><span>{states[key].title}</span><strong>{states[key].note}</strong></li>)}</ul>
-              <Typography variant="body2" color="textSecondary">来源异常显示绿色；连接断开则关灯。</Typography>
+              <ul className="rules">{monitorStates.map(([key, title]) => <li key={key}>
+                <i style={{ backgroundColor: savedProfiles?.[key] ? lightColor(savedProfiles[key]) : '#8290a4' }} /><span>{title}</span><strong>{savedProfiles?.[key] ? lightDescription(savedProfiles[key]) : key === 'offline' ? '绿色扩散灯' : states[key].note}</strong></li>)}</ul>
+              <Typography variant="body2" color="textSecondary">来源异常和离线使用设备保存的配置；连接断开则关灯。</Typography>
             </Card>
             <Paper className="apply-row"><Typography variant="body2" color="textSecondary">
               {!connected ? '请先连接设备。' : monitoring ? '监控模式已锁定手动灯光，请先切回本地。' : !editable ? '等待设备就绪或确认灯光能力。' : '点击应用后发送，收到设备回执才确认成功。'}</Typography>
               <Button variant="contained" disabled={!editable} onClick={applyLight}>应用灯光设置</Button>
             </Paper>
           </div>}
+          {page === 'monitor-lights' && <MonitorLights key={`${device.endpoint}-${connected}`} profile={snapshot.monitorProfile}
+            enabled={active && Boolean(confirmed)} connected={connected} supported={Boolean(snapshot.operations?.includes('monitorProfile'))}
+            demo={device.demo} save={profile => void device.send('monitor-profile', profile)} read={() => void device.send('monitor-profile-read')} />}
           {page === 'pairing' && <div className="detail-stack"><Card title="添加设备" caption="设备与电脑连接同一 Wi-Fi 后，输入屏幕上的地址和配对码">
             <div className="setting-row"><TextField label="设备地址" placeholder="例如 192.168.1.20" fullWidth size="small"
               value={address} disabled={busy || connected} onChange={event => setAddress(event.target.value)} /></div>
@@ -224,7 +235,7 @@ export default function App() {
               <div className="setting-row" key={key}><TextField label={label} value={settings[key]} disabled={!canConfigure} size="small" fullWidth
                 onChange={event => device.settingsChanged({ [key]: event.target.value })} />
                 <Button variant="outlined" disabled={!canConfigure} onClick={() => void choose(directory)}>浏览</Button></div>)}
-            <Typography variant="body2" color="textSecondary">监控期间延续已确认的运行与等待状态，收到结束事件后变绿；持续核对宿主进程。传输有效期 30 秒，保留既有余量；来源异常显示绿色，断联关灯。</Typography>
+            <Typography variant="body2" color="textSecondary">监控期间延续已确认的运行与等待状态，收到结束事件后显示完成灯效；持续核对宿主进程。传输有效期 30 秒，保留既有余量；来源异常使用设备监控配置，断联关灯。</Typography>
           </Card></div>}
         </main>
         <footer aria-live="polite">{device.notice}</footer>

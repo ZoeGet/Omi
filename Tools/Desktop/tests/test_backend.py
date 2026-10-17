@@ -85,6 +85,20 @@ class BackendTests(unittest.TestCase):
         self.connect()
         self.assertFalse(self.request("light", dict(effect="solid", red=0, green=0, blue=0, brightness=True))["ok"])
 
+    def test_profile_command_flows_through_backend_worker_and_session(self):
+        from protocol import default_monitor_profile
+        self.connect()
+        setting = default_monitor_profile()
+        setting["profiles"]["unknown"].update(effect="off", brightness=0)
+        self.assertTrue(self.request("monitor-profile", setting)["ok"])
+        command = self.wait_for("command")
+        self.assertTrue(command["ok"])
+        self.assertEqual(command["command"], "monitor-profile")
+        self.assertEqual(self.backend.worker.session.monitor_profile["profiles"], setting["profiles"])
+        self.assertEqual(self.backend.worker.session.monitor_profile["revision"], 1)
+        setting["profiles"].pop("idle")
+        self.assertFalse(self.request("monitor-profile", setting)["ok"])
+
     def test_suspended_frontend_keeps_latest_events_in_order(self):
         events = module.EventBuffer()
         events.put(dict(kind="connected"))

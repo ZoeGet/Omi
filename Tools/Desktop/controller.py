@@ -8,7 +8,7 @@ TOOLS = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(TOOLS / "DeviceBridge"))
 from bridge import Bridge, Health
 from state_view import LifecycleReader
-from protocol import Limits, ProtocolError, validate_light
+from protocol import Limits, ProtocolError, validate_light, validate_monitor_profile
 from simulator import DeviceSimulator, HostSession
 from usb_client import UsbClient
 
@@ -39,6 +39,7 @@ class ControlSession:
         self.bridge = None
         self.state = None
         self.last_light = None
+        self.monitor_profile = None
         self.monitor_lights = False
         self.monitor_green_off = False
 
@@ -46,12 +47,16 @@ class ControlSession:
         self.reopen()
         welcome = self.client.connect()
         self.operations = set(welcome["body"]["operations"])
+        self.monitor_profile = None
         self.monitor_lights = self.client.host.monitor_lights
         self.monitor_green_off = self.client.host.monitor_green_off
         self.state = self._accept(self.client.request("release" if local and self.monitor_green_off else "heartbeat", {}))
         return welcome
 
     def _accept(self, reply):
+        if "monitorProfile" in reply:
+            validate_monitor_profile(reply["monitorProfile"])
+            self.monitor_profile = copy.deepcopy(reply["monitorProfile"])
         if not reply["ok"]:
             raise ProtocolError(reply["code"])
         self.state = copy.deepcopy(reply["state"])
@@ -95,12 +100,24 @@ class ControlSession:
         self._accept(self.client.request("light", setting))
         self.last_light = copy.deepcopy(setting)
 
+    def read_monitor_profile(self):
+        if "monitorProfile" not in self.operations:
+            raise ProtocolError("monitor-profile-not-supported")
+        self._accept(self.client.request("monitorProfile", {}))
+
+    def set_monitor_profile(self, setting):
+        if "monitorProfile" not in self.operations:
+            raise ProtocolError("monitor-profile-not-supported")
+        validate_monitor_profile(setting)
+        self._accept(self.client.request("monitorProfile", setting))
+
     def tick(self):
         if self.monitor_requested:
             if not self.bridge.step():
                 self.state = None
                 raise ProtocolError("monitor-update-failed")
             self.state = copy.deepcopy(self.bridge.report["lastDeviceState"])
+            self.monitor_profile = copy.deepcopy(self.client.host.monitor_profile)
             if self.state.get("monitorOutput") == "local":
                 self.local()
         else:
@@ -123,7 +140,7 @@ class ControlSession:
         return dict(state=copy.deepcopy(self.state), monitorRequested=self.monitor_requested,
                     monitorLights=self.monitor_lights,
                     monitorGreenOff=self.monitor_green_off,
-                    operations=sorted(self.operations), lastLight=copy.deepcopy(self.last_light),
+                    operations=sorted(self.operations), monitorProfile=copy.deepcopy(self.monitor_profile), lastLight=copy.deepcopy(self.last_light),
                     diagnostics=copy.deepcopy(self.client.diagnostics))
 
 
@@ -131,7 +148,7 @@ class SimulatedClient:
     def __init__(self):
         self.limits = Limits(MAX_JSON_BYTES, MAX_SESSIONS)
         self.device = DeviceSimulator(self.limits, lease_ms=5000,
-                                      freshness_challenge=True, desktop_control=True, monitor_lights=True, monitor_green_off=True)
+                                      freshness_challenge=True, desktop_control=True, monitor_lights=True, monitor_green_off=True, monitor_profiles=True)
         self.host = None
         self.round_trips = []
         self.diagnostics = dict(replyTimeouts=0, decodeIssues=0, maxRoundTripMs=0)

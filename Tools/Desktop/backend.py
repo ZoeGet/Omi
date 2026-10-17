@@ -5,7 +5,7 @@ import sys
 import threading
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from controller import MAX_JSON_BYTES, default_monitor_root, validate_light
+from controller import MAX_JSON_BYTES, default_monitor_root, validate_light, validate_monitor_profile
 from worker import DeviceWorker
 
 
@@ -142,11 +142,13 @@ class Backend:
                 self.busy = True
                 self.worker.stop()
             return None
-        if action in ("local", "monitor", "light"):
+        if action in ("local", "monitor", "light", "monitor-profile", "monitor-profile-read"):
             if not self.connected or self.busy or not self.worker or not self.worker.is_alive():
                 raise ValueError("device-not-ready")
             if action == "light":
                 validate_light(body)
+            if action == "monitor-profile":
+                validate_monitor_profile(body)
             self.worker.submit(action, body)
             self.busy = True
             return None
@@ -159,7 +161,7 @@ class Backend:
                     or not isinstance(message["action"], str)):
                 raise ValueError("invalid-request")
             action, body = message["action"], message["body"]
-            if action not in ("connect", "connect-wireless", "light", "pair", "verify-wireless") and body is not None:
+            if action not in ("connect", "connect-wireless", "light", "monitor-profile", "pair", "verify-wireless") and body is not None:
                 raise ValueError("unexpected-body")
             result = dict(ok=True, result=self.dispatch(action, body))
         except Exception as error:
