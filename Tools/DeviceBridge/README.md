@@ -85,6 +85,12 @@ snapshot 正文包含：
 
 Windows 控制中心、实机步骤与最新验证见 [Desktop](../Desktop/README.md)。无线隔离实验沿用上述能力及 20 ms USB 过滤，另启用 WSS 配对、认证和控制。USB 有效监控优先，无线在 USB 释放后接续；语音同时退出两路监控，旧快照不能接管。ACK 描述本连接状态，跨连接最终输出及完整灯光读回、屏幕对话摘要尚未接入。无线不提供串口音频健康日志。
 
+## 持久化监控灯效（monitorProfile）
+
+只有 `welcome.body.operations` 声明 `monitorProfile` 时使用。`monitorProfile {}` 读取；写入正文为 `{"revision":当前版本,"profiles":{"working":Light,"waitingApproval":Light,"idle":Light,"unknown":Light,"offline":Light}}`，五项必须齐全且无多余字段；Light 与 `light` 的 effect/red/green/blue/brightness 约束相同。写入是设备全局配置，不切换本地/监控选择或覆盖语音。实际改变时版本递增，先确认完整 ACK 能生成，再提交单键 NVS 存储并发布；同序号重试或相同配置不重复写入。
+
+支持此能力的每条 ACK 正文额外包含 `monitorProfile={revision,profiles}`（包括冲突/失败回复），设备状态结构不变。USB/WSS 共用版本；旧版本返回 `monitor-profile-conflict`，存储失败返回 `monitor-profile-save-failed`，版本耗尽返回 `monitor-profile-revision-exhausted`。主机校验完整读回，保持既有 JSON/深度/重试预算与状态采集周期。断联/租约到期仍强制关灯，unknown/offline 使用各自配置；无事件和业务状态过期仍是 unknown。NVS 启动加载不自动进入监控，也不恢复旧快照/租约。物理断电验证仍需新版固件实机验收。
+
 ## 状态来源与运行参数
 
 CodexMonitor 保存生命周期观测和事件关联宿主证据。CLI 默认仍使用事件年龄预算。桌面监控通过 `LifecycleReader` 接纳近期且宿主存活的 schema 2 事件证明，随后延续同一生命周期，收到结束事件才结束；不会将长时间无新事件误当成完成。旧事件时间与年龄保留不变，每轮独立校验的评估使用原有 30 秒预算，扣除 8 秒传输余量；设备挑战还会扣除心跳到快照的耗时，缓存评估不能自行续期。重开监控不接纳过期历史状态，来源/绑定/进程失效则清除延续资格。心跳不生成业务事件，`sourceLiveness` 仍为 `unverified`；遗漏 Stop 且宿主仍存活时无法独立确认聊天已结束。协议 unknown 不等同 idle，`waitingApproval` 同时覆盖待审批与待用户选项回复。
