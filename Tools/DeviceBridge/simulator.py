@@ -1,11 +1,11 @@
 import copy
 
 from protocol import (Limits, MAX_SEQUENCE, OPERATIONS, ProtocolError, decode, encode, envelope,
-                      token, validate_snapshot, validate_light)
+                      token, validate_snapshot, validate_light, default_monitor_profile, validate_monitor_profile)
 
 
 class DeviceSimulator:
-    def __init__(self, limits, *, lease_ms, freshness_challenge=False, desktop_control=False, monitor_lights=False, monitor_green_off=False):
+    def __init__(self, limits, *, lease_ms, freshness_challenge=False, desktop_control=False, monitor_lights=False, monitor_green_off=False, monitor_profiles=False):
         if type(lease_ms) is not int or lease_ms <= 0:
             raise ProtocolError("explicit-positive-lease-required")
         self.limits = limits
@@ -32,6 +32,9 @@ class DeviceSimulator:
         self.voice_active = False
         self.monitor_lights = monitor_lights
         self.monitor_green_off = monitor_green_off
+        self.monitor_profile = default_monitor_profile() if monitor_profiles else None
+        self.profile_writes = 0
+        self.profile_save_fails = False
         self.monitor_selected = False
         self.voice_suppressed = False
 
@@ -59,7 +62,7 @@ class DeviceSimulator:
         self.challenge_at = None
         self.voice_suppressed = False
         return envelope(self.boot, self.channel, "", 0, "welcome", dict(
-            operations=[kind for kind in OPERATIONS if kind != "light" or self.desktop_control], maxJsonBytes=self.limits.max_json_bytes,
+            operations=[kind for kind in OPERATIONS if (kind != "light" or self.desktop_control) and (kind != "monitorProfile" or self.monitor_profile is not None)], maxJsonBytes=self.limits.max_json_bytes,
             maxSessions=self.limits.max_sessions, leaseMs=self.lease_ms,
             **({"monitorLights": True} if self.monitor_lights else {}),
             **({"monitorGreenOff": True} if self.monitor_green_off else {}),
@@ -90,7 +93,8 @@ class DeviceSimulator:
 
     def reply(self, request, ok, code, *, duplicate=False):
         return envelope(self.boot, self.channel or request["channel"], request["session"], request["seq"], "ack",
-                        dict(ok=ok, code=code, command=request["type"], duplicate=duplicate, state=self.state()))
+                        dict(ok=ok, code=code, command=request["type"], duplicate=duplicate, state=self.state(),
+                             **({"monitorProfile": copy.deepcopy(self.monitor_profile)} if self.monitor_profile is not None else {})))
 
     def receive(self, request, now_ms):
         self.advance(now_ms)
@@ -140,6 +144,20 @@ class DeviceSimulator:
                     self.applied_snapshots += 1
                     if not self.voice_suppressed:
                         self.monitor_selected = True
+                elif kind == "monitorProfile" and self.monitor_profile is not None:
+                    if body:
+                        validate_monitor_profile(body)
+                        if body["revision"] != self.monitor_profile["revision"]:
+                            raise ProtocolError("monitor-profile-conflict")
+                        if body["profiles"] != self.monitor_profile["profiles"]:
+                            if body["revision"] == MAX_SEQUENCE:
+                                raise ProtocolError("monitor-profile-revision-exhausted")
+                            if self.profile_save_fails:
+                                raise ProtocolError("monitor-profile-save-failed")
+                            self.monitor_profile = copy.deepcopy(body)
+                            self.monitor_profile["revision"] += 1
+                            self.profile_writes += 1
+                    self.deadline = now_ms + self.lease_ms
                 elif kind == "light" and self.desktop_control:
                     if self.mode == "monitor":
                         raise ProtocolError("monitor-mode-active")
@@ -194,6 +212,7 @@ class HostSession:
         if "monitorGreenOff" in body and type(body["monitorGreenOff"]) is not bool:
             raise ProtocolError("invalid-capabilities")
         self.monitor_green_off = body.get("monitorGreenOff", False)
+        self.monitor_profile = None
         self.lease_ms = body["leaseMs"]
         self.boot, self.channel, self.session = welcome["boot"], welcome["channel"], token()
         self.next_seq = 1
@@ -243,6 +262,11 @@ class HostSession:
             raise ProtocolError("invalid-ack-state")
         if request["type"] == "hello" and not reply["body"]["ok"]:
             raise ProtocolError("hello-rejected-reconnect-required")
+        if "monitorProfile" in self.operations:
+            validate_monitor_profile(reply["body"].get("monitorProfile"))
+            self.monitor_profile = copy.deepcopy(reply["body"]["monitorProfile"])
+        elif "monitorProfile" in reply["body"]:
+            raise ProtocolError("unnegotiated-monitor-profile")
         self.pending = None
         self.next_seq += 1
         if request["type"] == "hello":

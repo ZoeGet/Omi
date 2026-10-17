@@ -9,7 +9,7 @@ import uuid
 
 PREFIX = b"@OMI "
 STATUSES = ("waitingApproval", "working", "unknown", "idle", "offline")
-OPERATIONS = ("hello", "heartbeat", "snapshot", "release", "light")
+OPERATIONS = ("hello", "heartbeat", "snapshot", "release", "light", "monitorProfile")
 LIGHT_EFFECTS = ("solid", "rainbow", "breathe", "sweep", "centerExpand", "off")
 FIELDS = {"v", "boot", "channel", "session", "seq", "type", "body"}
 MAX_SEQUENCE = 0xFFFFFFFF
@@ -157,6 +157,23 @@ def validate_light(body):
                                                    for key in ("red", "green", "blue", "brightness"))):
         raise ProtocolError("invalid-light-setting")
     return body
+
+
+def default_monitor_profile():
+    profiles = {status: dict(effect="centerExpand", red=0, green=255, blue=0, brightness=16) for status in STATUSES}
+    profiles["working"].update(red=255, green=0)
+    profiles["waitingApproval"].update(red=255)
+    return dict(revision=0, profiles=profiles)
+
+
+def validate_monitor_profile(value):
+    if (not isinstance(value, dict) or set(value) != {"revision", "profiles"}
+            or type(value["revision"]) is not int or not 0 <= value["revision"] <= MAX_SEQUENCE
+            or not isinstance(value["profiles"], dict) or set(value["profiles"]) != set(STATUSES)):
+        raise ProtocolError("invalid-monitor-profile")
+    for light in value["profiles"].values():
+        validate_light(light)
+    return value
 
 
 def validate_snapshot(body, limits):
