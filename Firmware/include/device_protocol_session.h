@@ -7,6 +7,8 @@ struct cJSON;
 
 namespace OmiPetProtocol {
 
+class MonitorProfileStore;
+
 //  预算和单调毫秒时钟由调用方显式提供，没有实机默认参数 / Callers supply explicit budgets and a monotonic millisecond clock without device defaults
 struct SessionLimits {
   std::size_t maxJsonBytes;
@@ -55,6 +57,7 @@ class ProtocolSession {
   bool advance(uint64_t nowMs);
   void disconnect();
   SessionView view() const;
+  void setMonitorProfileStore(MonitorProfileStore* store) { profiles_ = store; }
   LocalLightCommand localLightCommand() const { return light_; }
   void allowLocalLightCommand(bool allowed, const char* reason = "voice-active") { localLightAllowed_ = allowed; localLightReason_ = reason; }
   bool takeLocalSelection() { const bool selected = localSelected_; localSelected_ = false; return selected; }
@@ -78,9 +81,10 @@ class ProtocolSession {
   SessionView stateView(const State& state) const;
   SessionResult writeAck(const cJSON* request, const State& state, bool ok,
                          const char* code, bool duplicate, bool monitorSelected,
-                         char* output, std::size_t capacity) const;
+                         char* output, std::size_t capacity, const struct MonitorProfiles* profiles = nullptr) const;
   MonitorOutput monitorOutput(const State& state, bool selected) const;
 
+  MonitorProfileStore* profiles_ = nullptr;
   SessionLimits limits_;
   char boot_[33] = {};
   char channel_[33] = {};

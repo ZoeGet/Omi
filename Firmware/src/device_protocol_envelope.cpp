@@ -133,6 +133,7 @@ EnvelopeResult inspectEnvelope(const char* data, std::size_t length,
       else if (std::strcmp(type->valuestring, "release") == 0) info.type = CommandType::Release;
 #if OMIPET_DESKTOP_CONTROL
       else if (std::strcmp(type->valuestring, "light") == 0) info.type = CommandType::Light;
+      else if (std::strcmp(type->valuestring, "monitorProfile") == 0) info.type = CommandType::MonitorProfile;
 #endif
       if (info.type != CommandType::Unsupported) {
         info.sequence = static_cast<uint32_t>(seq->valuedouble);
@@ -163,6 +164,7 @@ const char* commandTypeName(CommandType type) {
     case CommandType::Snapshot: return "snapshot";
     case CommandType::Release: return "release";
     case CommandType::Light: return "light";
+    case CommandType::MonitorProfile: return "monitorProfile";
     default: return "unsupported";
   }
 }

@@ -2,6 +2,7 @@
 
 #if OMIPET_PROTOCOL_EXPERIMENT
 #include "device_protocol_session.h"
+#include "monitor_light_profiles.h"
 #include "device_protocol_envelope.h"
 #include "cJSON.h"
 #include <climits>
@@ -265,6 +266,10 @@ SessionResult ProtocolSession::open(const char* channel, uint64_t nowMs, char* o
     if (!item || !cJSON_AddItemToArray(operations, item)) { cJSON_Delete(item); ok = false; }
   }
 #endif
+  if (ok && profiles_) {
+    cJSON* item = cJSON_CreateString("monitorProfile");
+    if (!item || !cJSON_AddItemToArray(operations, item)) { cJSON_Delete(item); ok = false; }
+  }
   if (!ok) { cJSON_Delete(root); return SessionResult::OutOfMemory; }
   const SessionResult result = serialize(root, limits_.maxJsonBytes, output, capacity);
   if (result == SessionResult::Reply) {
@@ -277,7 +282,7 @@ SessionResult ProtocolSession::open(const char* channel, uint64_t nowMs, char* o
 
 SessionResult ProtocolSession::writeAck(const cJSON* request, const State& state, bool ok,
                                        const char* code, bool duplicate, bool monitorSelected,
-                                       char* output, std::size_t capacity) const {
+                                       char* output, std::size_t capacity, const MonitorProfiles* profiles) const {
   cJSON* root = envelope(boot_, channel_, field(request, "session")->valuestring,
                          static_cast<uint32_t>(field(request, "seq")->valuedouble), "ack");
   if (!root) return SessionResult::OutOfMemory;
@@ -305,6 +310,21 @@ SessionResult ProtocolSession::writeAck(const cJSON* request, const State& state
 #else
   (void)monitorSelected;
 #endif
+  if (profiles_) {
+    const auto& value = profiles ? *profiles : profiles_->current();
+    cJSON* config = cJSON_AddObjectToObject(body, "monitorProfile");
+    cJSON* lights = config ? cJSON_AddObjectToObject(config, "profiles") : nullptr;
+    bool complete = lights && cJSON_AddNumberToObject(config, "revision", value.revision);
+    const char* const effectNames[] = {"solid", "rainbow", "breathe", "sweep", "centerExpand", "off"};
+    for (unsigned i = 0; complete && i < kMonitorStateCount; ++i) {
+      const auto& light = value.lights[i];
+      cJSON* entry = cJSON_AddObjectToObject(lights, kMonitorStates[i]);
+      complete = entry && cJSON_AddStringToObject(entry, "effect", effectNames[static_cast<unsigned>(light.effect)]) &&
+        cJSON_AddNumberToObject(entry, "red", light.red) && cJSON_AddNumberToObject(entry, "green", light.green) &&
+        cJSON_AddNumberToObject(entry, "blue", light.blue) && cJSON_AddNumberToObject(entry, "brightness", light.brightness);
+    }
+    if (!complete) { cJSON_Delete(root); return SessionResult::OutOfMemory; }
+  }
   return serialize(root, limits_.maxJsonBytes, output, capacity);
 }
 
@@ -329,6 +349,8 @@ SessionResult ProtocolSession::receive(const char* data, std::size_t length, uin
   bool nextVoiceSuppressed = voiceSuppressed_;
   LocalLightCommand nextLight = light_;
   bool lightChanged = false;
+  MonitorProfiles nextProfiles;
+  bool profilesChanged = false;
   const cJSON* body = field(request, "body");
   const char* code = "ok";
   bool ok = false;
@@ -384,6 +406,30 @@ SessionResult ProtocolSession::receive(const char* data, std::size_t length, uin
       }
     }
 #if OMIPET_DESKTOP_CONTROL
+    else if (info.type == CommandType::MonitorProfile && profiles_) {
+      if (cJSON_GetArraySize(body) == 0) ok = true;
+      else {
+        const char* const names[] = {"revision", "profiles"};
+        uint32_t expected = 0;
+        const cJSON* entries = field(body, "profiles");
+        if (!fields(body, names, 2) || !unsignedNumber(field(body, "revision"), 0, expected) ||
+            !fields(entries, kMonitorStates, kMonitorStateCount)) code = "invalid-monitor-profile";
+        else if (expected != profiles_->current().revision) code = "monitor-profile-conflict";
+        else {
+          nextProfiles = profiles_->current();
+          const char* issue = nullptr;
+          for (unsigned i = 0; i < kMonitorStateCount && !issue; ++i) issue = localLight(field(entries, kMonitorStates[i]), nextProfiles.lights[i]);
+          if (issue) code = issue;
+          else if (!sameMonitorLights(nextProfiles, profiles_->current()) && expected == UINT32_MAX) code = "monitor-profile-revision-exhausted";
+          else {
+            profilesChanged = !sameMonitorLights(nextProfiles, profiles_->current());
+            if (profilesChanged) ++nextProfiles.revision;
+            ok = true;
+          }
+        }
+      }
+      if (ok) { next.leaseActive = true; next.leaseStart = now_; }
+    }
     else if (info.type == CommandType::Light) {
       if (state_.monitor) code = "monitor-mode-active";
       else if (!localLightAllowed_) code = localLightReason_;
@@ -423,7 +469,12 @@ SessionResult ProtocolSession::receive(const char* data, std::size_t length, uin
   }
   if (consume) next.sequence = info.sequence;
   //  先完整生成应答再提交；输出不足或分配失败时可以原序号重试 / Generate the full reply before committing so output or allocation failure permits retry
-  const SessionResult result = writeAck(request, next, ok, code, duplicate, nextMonitorSelected, output, capacity);
+  SessionResult result = writeAck(request, next, ok, code, duplicate, nextMonitorSelected, output, capacity,
+                                  profilesChanged ? &nextProfiles : nullptr);
+  if (result == SessionResult::Reply && profilesChanged && !profiles_->save(nextProfiles)) {
+    ok = false; code = "monitor-profile-save-failed";
+    result = writeAck(request, next, ok, code, false, nextMonitorSelected, output, capacity);
+  }
   if (result == SessionResult::Reply && consume) {
     state_ = next;
     monitorSelected_ = nextMonitorSelected;

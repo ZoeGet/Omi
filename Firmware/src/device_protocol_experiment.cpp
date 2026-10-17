@@ -3,6 +3,7 @@
 #if OMIPET_PROTOCOL_EXPERIMENT
 #include <Arduino.h>
 #include "device_protocol_envelope.h"
+#include "monitor_light_profiles.h"
 #include "device_protocol_framer.h"
 
 #if OMIPET_PROTOCOL_USB
@@ -59,6 +60,9 @@ void pollSerialExperiment(void (*debugWake)(), bool localLightAllowed, const cha
                                                     OMIPET_PROTOCOL_MAX_JSON_DEPTH, OMIPET_PROTOCOL_LEASE_MS,
                                                     OMIPET_PROTOCOL_LINK_GRACE_MS);
   }
+#if OMIPET_DESKTOP_CONTROL && OMIPET_MONITOR_LIGHTS && OMIPET_MONITOR_GREEN_OFF
+  gTransport->setMonitorProfileStore(&monitorProfiles);
+#endif
   if (gBusReset.exchange(false)) { ++gBusResets; gTransport->disconnect(); }
   UsbPort port;
   gTransport->allowLocalLightCommand(localLightAllowed, reason);

@@ -10,6 +10,9 @@
 #include "led_controller.h"
 #if OMIPET_MONITOR_LIGHTS
 #include "led_arbitration.h"
+#if OMIPET_DESKTOP_CONTROL && OMIPET_MONITOR_GREEN_OFF
+#include "monitor_light_profiles.h"
+#endif
 #endif
 #include "omi_pet_ui.h"
 #include "time_service.h"
@@ -85,6 +88,11 @@ OmiPetProtocol::MonitorTransportSelection gMonitorTransport;
 OmiPetLed::VoiceLightOverride gVoiceLightOverride;  //  语音接管保持到远端退出 / Voice takeover lasts until remote exit
 OmiPetLed::LightOwner gLightOwner = OmiPetLed::LightOwner::Local;  //  上一帧的物理输出归属 / Physical output owner of the prior frame
 OmiPetLed::MonitorLightStatus gMonitorLightStatus = OmiPetLed::MonitorLightStatus::Unknown;  //  上一帧监控状态 / Prior monitor status
+#if OMIPET_DESKTOP_CONTROL && OMIPET_MONITOR_GREEN_OFF
+uint32_t gMonitorProfileRevision = UINT32_MAX;
+uint8_t gLocalBrightness = 16;
+const char* gMonitorProfileStatus = "";
+#endif
 OmiPetLed::EffectController gMonitorEffects(OmiPetLed::strip);  //  与本地灯效分离的监控扩散时间轴 / Separate monitor-expansion timeline from local effects
 #endif
 
@@ -94,6 +102,9 @@ void beginWakeLight() {
   if (gLightOwner == OmiPetLed::LightOwner::Monitor) {
     Serial.println("[LED] owner=local reason=voice");
   }
+#if OMIPET_DESKTOP_CONTROL && OMIPET_MONITOR_GREEN_OFF
+  if (gLightOwner != OmiPetLed::LightOwner::Local) OmiPetLed::strip.setBrightness(gLocalBrightness);
+#endif
   gVoiceLightOverride.onVoiceInteraction();
 #if OMIPET_MONITOR_GREEN_OFF
   OmiPetProtocol::yieldUsbMonitorToVoice();
@@ -520,6 +531,9 @@ void updateDesktopLightCommand() {
   appliedRevision = command.revision;
 #endif
   using namespace OmiPetLed;
+#if OMIPET_MONITOR_LIGHTS && OMIPET_MONITOR_GREEN_OFF
+  gLocalBrightness = command.brightness;
+#endif
   using OmiPetProtocol::LocalLightEffect;
   strip.setBrightness(command.brightness);
   EffectMode mode = EffectMode::Solid;
@@ -570,6 +584,9 @@ void updateMonitorLights() {
   }
   if (decision.owner != LightOwner::Monitor) {
     if (gLightOwner != LightOwner::Local) {
+#if OMIPET_DESKTOP_CONTROL && OMIPET_MONITOR_GREEN_OFF
+      strip.setBrightness(gLocalBrightness);
+#endif
       effects.refresh();
       Serial.printf("[LED] owner=local reason=%s\n", voiceOverride ? "voice" : "fallback");
     }
@@ -577,6 +594,21 @@ void updateMonitorLights() {
     gMonitorLightStatus = MonitorLightStatus::Unknown;
     return;
   }
+#if OMIPET_DESKTOP_CONTROL && OMIPET_MONITOR_GREEN_OFF
+  const auto& profiles = OmiPetProtocol::monitorProfiles.current();
+  if (gLightOwner != LightOwner::Monitor || std::strcmp(gMonitorProfileStatus, view.displayStatus) != 0 ||
+      gMonitorProfileRevision != profiles.revision) {
+    if (gLightOwner == LightOwner::Local) gLocalBrightness = strip.brightness();
+    const auto& light = profiles.forStatus(view.displayStatus);
+    strip.setBrightness(light.brightness);
+    gMonitorEffects.begin();
+    gMonitorEffects.setConfiguration(static_cast<EffectMode>(light.effect), light.red, light.green, light.blue);
+    gMonitorProfileRevision = profiles.revision;
+    gMonitorProfileStatus = view.displayStatus;
+    Serial.printf("[LED] owner=monitor status=%s profile_revision=%lu effect=%u brightness=%u\n",
+      view.displayStatus, static_cast<unsigned long>(profiles.revision), static_cast<unsigned>(light.effect), light.brightness);
+  }
+#else
   if (gLightOwner != LightOwner::Monitor || gMonitorLightStatus != decision.status) {
     MonitorLightRgb color{};
     if (!monitorLightRgb(decision.status, color)) return;
@@ -589,6 +621,7 @@ void updateMonitorLights() {
     Serial.printf("[LED] owner=monitor effect=center_expand status=%s brightness=%u\n", view.displayStatus,
                   static_cast<unsigned>(strip.brightness()));
   }
+#endif
   gLightOwner = LightOwner::Monitor;
   gMonitorLightStatus = decision.status;
 }
@@ -633,6 +666,9 @@ void setup() {
   Serial.flush();
 
   //  初始化灯带和非阻塞动效 / Initialize the strip and non-blocking effects
+#if OMIPET_DESKTOP_CONTROL && OMIPET_MONITOR_LIGHTS && OMIPET_MONITOR_GREEN_OFF
+  OmiPetProtocol::beginMonitorProfiles();
+#endif
   OmiPetLed::strip.begin(16);
   OmiPetLed::effects.begin();
   OmiPetLed::effects.setSolid(255, 255, 255);

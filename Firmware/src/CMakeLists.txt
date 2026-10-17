@@ -9,6 +9,7 @@ set(OMIPET_SOURCES
     "device_protocol_session.cpp"
     "ics43434_mic.cpp"
     "led_controller.cpp"
+    "monitor_light_profiles.cpp"
     "multinet_command_recognizer.cpp"
     "omi_pet_ui.cpp"
     "pcm_audio_frame_buffer.cpp"

@@ -129,6 +129,13 @@ def main():
              "-o", path(output / "desktop_control_native")])
         desktop_result = run([path(output / "desktop_control_native")])
         monitor_policy_flags = desktop_flags + ["-DOMIPET_MONITOR_LIGHTS=1", "-DOMIPET_MONITOR_GREEN_OFF=1"]
+        run(["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror", *sanitizer, *monitor_policy_flags,
+             "-I" + path(native), "-I" + path(native / "mock_idf"), "-I" + path(includes), "-I" + path(cjson),
+             path(native / "monitor_profiles_native.cpp"), path(repository / "Firmware/src/monitor_light_profiles.cpp"),
+             path(repository / "Firmware/src/device_protocol_envelope.cpp"),
+             path(repository / "Firmware/src/device_protocol_session.cpp"), path(output / "cjson.o"),
+             "-o", path(output / "monitor_profiles_native")])
+        profiles_result = run([path(output / "monitor_profiles_native")])
         run(check + monitor_policy_flags, source='#include "protocol_experiment_config.h"\n')
         run(check + desktop_flags + ["-DOMIPET_MONITOR_GREEN_OFF=1"], source='#include "protocol_experiment_config.h"\n', success=False)
         run(["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror", *sanitizer, *monitor_policy_flags,
@@ -187,6 +194,7 @@ void tick(bool sof) { USB_SERIAL_JTAG.int_raw.sof_int_raw = sof ? 1 : 0; usb_ser
         print(transport_result.stdout, end="")
         print(challenge_result.stdout, end="")
         print(desktop_result.stdout, end="")
+        print(profiles_result.stdout, end="")
         print(monitor_policy_result.stdout, end="")
         print(arbiter_result.stdout, end="")
         print(effect_result.stdout, end="")
@@ -199,6 +207,7 @@ void tick(bool sof) { USB_SERIAL_JTAG.int_raw.sof_int_raw = sof ? 1 : 0; usb_ser
                       transportTests=[line[5:] for line in transport_result.stdout.splitlines() if line.startswith("PASS ")],
                       challengeTests=[line[5:] for line in challenge_result.stdout.splitlines() if line.startswith("PASS ")],
                       desktopTests=[line[5:] for line in desktop_result.stdout.splitlines() if line.startswith("PASS ")],
+                      monitorProfileTests=[line[5:] for line in profiles_result.stdout.splitlines() if line.startswith("PASS ")],
                       monitorPolicyTests=[line[5:] for line in monitor_policy_result.stdout.splitlines() if line.startswith("PASS ")],
                       arbiterTests=[line[5:] for line in arbiter_result.stdout.splitlines() if line.startswith("PASS ")],
                       effectTests=[line[5:] for line in effect_result.stdout.splitlines() if line.startswith("PASS ")],

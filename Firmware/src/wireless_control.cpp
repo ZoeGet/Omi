@@ -1,6 +1,7 @@
 #include "wireless_control.h"
 #if OMIPET_WIFI_CONTROL
 #include "protocol_experiment_config.h"
+#include "monitor_light_profiles.h"
 #include <Arduino.h>
 #include <esp_system.h>
 #include <esp_timer.h>
@@ -70,6 +71,9 @@ void pollWirelessControl(bool networkConnected, bool localAllowed, const char* r
       session.reset();
       return;
     }
+#if OMIPET_DESKTOP_CONTROL && OMIPET_MONITOR_LIGHTS && OMIPET_MONITOR_GREEN_OFF
+    session->setMonitorProfileStore(&monitorProfiles);
+#endif
     initialized = true;
   }
   if (xSemaphoreTake(mutex, 0) != pdTRUE) return;

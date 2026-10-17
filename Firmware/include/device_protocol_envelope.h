@@ -7,7 +7,7 @@ namespace OmiPetProtocol {
 
 //  此阶段只诊断信封，不授权或执行任何设备命令 / This stage diagnoses envelopes without authorizing or executing device commands
 enum class EnvelopeResult { Valid, InvalidText, DepthExceeded, InvalidJson, DuplicateKey, InvalidEnvelope };
-enum class CommandType { Hello, Heartbeat, Snapshot, Release, Light, Unsupported };
+enum class CommandType { Hello, Heartbeat, Snapshot, Release, Light, MonitorProfile, Unsupported };
 
 struct EnvelopeInfo {
   CommandType type = CommandType::Unsupported;
