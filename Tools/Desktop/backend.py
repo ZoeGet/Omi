@@ -50,9 +50,7 @@ class Backend:
                 self.connected, self.busy = True, False
             elif event["kind"] == "disconnected":
                 self.connected = self.busy = False
-            elif event["kind"] == "command":
-                self.busy = False
-            elif event["kind"] == "pairing":
+            elif event["kind"] in ("command", "pairing"):
                 self.busy = False
         return events
 

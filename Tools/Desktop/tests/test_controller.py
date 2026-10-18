@@ -167,7 +167,7 @@ class ControllerTests(unittest.TestCase):
                     if fails:
                         client.connect = Mock(side_effect=ProtocolError('handshake-failed'))
                     with patch('serial.Serial', return_value=stream), patch('wss_stream.WssStream', return_value=stream), \
-                         patch('controller.monitor_reader', return_value=demo_reader), patch('controller.UsbClient', return_value=client) as factory:
+                         patch('controller.LifecycleReader', return_value=demo_reader) as reader, patch('controller.UsbClient', return_value=client) as factory:
                         connect = controller.open_wifi if wireless else controller.open_usb
                         if fails:
                             with self.assertRaisesRegex(ProtocolError, 'handshake-failed'):
@@ -180,6 +180,7 @@ class ControllerTests(unittest.TestCase):
                             self.assertEqual(health is None, wireless)
                             self.assertEqual(factory.call_args.kwargs['on_bytes'] is None, wireless)
                             stream.open.assert_called_once()
+                        reader.assert_called_once_with(Path('.'), Path('bindings.json'), max_age_seconds=controller.MAX_AGE_SECONDS)
 
 
 if __name__ == "__main__":

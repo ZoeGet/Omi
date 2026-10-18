@@ -25,10 +25,6 @@ def default_monitor_root():
     return Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "OmiPet/codex-monitor-probe-v2"
 
 
-def monitor_reader(root, bindings):
-    return LifecycleReader(root, bindings, max_age_seconds=MAX_AGE_SECONDS)
-
-
 class ControlSession:
     def __init__(self, client, reader, reopen=lambda: None):
         self.client = client
@@ -50,7 +46,7 @@ class ControlSession:
         self.monitor_profile = None
         self.monitor_lights = self.client.host.monitor_lights
         self.monitor_green_off = self.client.host.monitor_green_off
-        self.state = self._accept(self.client.request("release" if local and self.monitor_green_off else "heartbeat", {}))
+        self._accept(self.client.request("release" if local and self.monitor_green_off else "heartbeat", {}))
         return welcome
 
     def _accept(self, reply):
@@ -60,7 +56,6 @@ class ControlSession:
         if not reply["ok"]:
             raise ProtocolError(reply["code"])
         self.state = copy.deepcopy(reply["state"])
-        return self.state
 
     def local(self):
         if self.client.host is None or self.client.host.pending is not None or self.client.host.invalidated:
@@ -185,7 +180,7 @@ def _open_control(stream, root, bindings, reopen, health=None):
     client = UsbClient(stream, Limits(MAX_JSON_BYTES, MAX_SESSIONS),
                        timeout_seconds=TIMEOUT_SECONDS, retries=RETRIES, on_bytes=health.feed if health else None)
     try:
-        session = ControlSession(client, monitor_reader(root, bindings), reopen)
+        session = ControlSession(client, LifecycleReader(root, bindings, max_age_seconds=MAX_AGE_SECONDS), reopen)
         session.connect()
         return session, stream, health
     except Exception:

@@ -148,5 +148,5 @@ export function useDevice() {
   function settings(patch: Partial<Settings>) {
     setState(value => ({ ...value, settings: { ...value.settings, ...patch } }));
   }
-  return { ...state, native, send, refresh, request, settingsChanged: settings, report };
+  return { ...state, send, refresh, request, settingsChanged: settings, report };
 }

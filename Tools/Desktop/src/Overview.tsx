@@ -42,7 +42,7 @@ export function Overview({ device, light, navigate }: { device: Device; light: L
     </Card>
     <Card title="控制模式" caption="选择本地控制，或跟随 Codex 状态">
       <div className="mode-list">{([['local', '本地灯光', '手动设置与语音控制'], ['monitor', 'Codex 监控', '跟随任务运行与等待状态']] as const).map(([key, text, note]) =>
-        <div className={`mode-row ${(key === 'local' ? local : monitorConnected) ? 'active' : ''}`} key={key}><div><strong>{text}</strong><small>{note}</small></div>
+        <div className="mode-row" key={key}><div><strong>{text}</strong><small>{note}</small></div>
           <Switch checked={Boolean(key === 'local' ? local : monitorConnected)} disabled={!active || key === 'monitor' && !monitorReady}
             onChange={() => void device.send(key)} aria-label={text} /></div>)}</div>
       <p className="module-note">{connected && !monitorReady ? '当前固件不支持监控灯光规则。' : '监控中锁定手动调灯，语音可立即接管。'}</p>

@@ -208,9 +208,6 @@ p { margin: 0; font-size: 13px; line-height: 1.7; }
   .page-heading { margin-bottom: 20px; }
   h1 { font-size: 25px; }
   .header-status { gap: 8px; font-size: 11px; }
-  .monitor-layout { grid-template-columns: 1fr; }
-  .profile-list { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
-  .profile-list h2, .profile-list>.module-note { grid-column: 1 / -1; }
   .profile-list .profile-choice { padding: 11px 8px; margin-bottom: 0; }
   .profile-choice>svg:last-child { display: none; }
   .profile-choice strong { font-size: 12px; }
