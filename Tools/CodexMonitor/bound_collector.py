@@ -5,12 +5,7 @@ import sys
 import time
 
 
-def main():
-    directory = Path(__file__).resolve().parent
-    source = directory / "lifecycle_collector.py"
-    spec = importlib.util.spec_from_file_location("lifecycle_collector", source)
-    lifecycle = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(lifecycle)
+def run(lifecycle, configuration):
     original_collect = lifecycle.collect
 
     def collect_and_bind(root, payload):
@@ -29,7 +24,6 @@ def main():
             finally:
                 lifecycle.timestamp = original_timestamp
             try:
-                configuration = directory / "host-binding-config.json"
                 if configuration.exists() and stamped:
                     from host_binding_sidecar import update
                     update(root, payload, json.loads(configuration.read_text(encoding="utf-8-sig")),
@@ -41,6 +35,14 @@ def main():
 
     lifecycle.collect = collect_and_bind
     return lifecycle.main()
+
+
+def main():
+    directory = Path(__file__).resolve().parent
+    spec = importlib.util.spec_from_file_location("lifecycle_collector", directory / "lifecycle_collector.py")
+    lifecycle = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(lifecycle)
+    return run(lifecycle, directory / "host-binding-config.json")
 
 
 if __name__ == "__main__":

@@ -102,6 +102,12 @@ p { margin: 0; font-size: 13px; line-height: 1.7; }
 .app-notice { display: flex; gap: 9px; align-items: center; border-top: 1px solid var(--line); padding: 12px 32px; flex-shrink: 0; font-size: 12px; color: var(--muted); line-height: 1.6; }
 .notice-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
 .detail-stack { display: grid; gap: 20px; max-width: 1280px; margin: auto; }
+.setup-welcome { max-width: 1280px; margin: 0 auto 24px; }
+.setup-status { padding: 12px 14px; border-radius: 5px; background: var(--accent-soft); color: var(--text); }
+.setup-steps { display: grid; gap: 24px; padding-left: 24px; }
+.setup-steps li>p { color: var(--muted); font-size: 12px; margin: 7px 0 12px; }
+.setup-steps .button-row { margin-top: 12px; }
+.setup-remove { border-top: 1px solid var(--line); padding-top: 18px; display: grid; gap: 12px; justify-items: start; }
 .setting-row { display: grid; grid-template-columns: minmax(110px,1fr) minmax(0,1.7fr); gap: 24px; align-items: center; padding: 23px 0; border-bottom: 1px solid var(--line); }
 .setting-row:last-of-type { border-bottom: 0; }
 .setting-copy p { font-size: 12px; color: var(--muted); margin-top: 5px; }

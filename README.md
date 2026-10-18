@@ -23,6 +23,8 @@ OmiPet 是一个面向桌面陪伴场景的开源软硬件项目：它以 ESP32-
 
 当前固件不启用 WakeNet，也不把现成唤醒词冒充为产品唤醒词；“老鼠狒狒”通过中文 MultiNet 自定义命令词表作为唤醒入口，仍属于低延迟和误识别特性待继续验证的实验方案。
 
+语音配对/重新配对入口（需升级配套固件与模型；语音开窗、重配及无线控制已实测，异常边界待验）：设备联网后说“老鼠狒狒”，听到确认音再说“开启配对模式”，显示当前 IP 和六位新码；普通重启不开窗。软件可首次配对或主动重配，后者成功后旧凭据失效，日常无需 USB。窗口/异常恢复规则见 [PAIRING.md](Tools/DeviceBridge/PAIRING.md)。
+
 > **English** — The current firmware includes the display, environmental sensor, LED strip, passive buzzer, Wi-Fi provisioning, verified ICS-43434 I²S capture, and an ESP-SR v1.2.0 Chinese MultiNet `mn6_cn` command-recognition path using the separate model partition. WakeNet is disabled; “老鼠狒狒” is registered as a custom MultiNet phrase and remains an experimental wake-entry strategy whose latency and false-trigger behavior still require validation.
 
 ## 功能概览 / Features
@@ -196,7 +198,7 @@ WakeNet 是专门的唤醒模型，但当前 ESP-SR 模型包中的现成模型�
 
 Windows 主机端工具见 [Tools/CodexMonitor](Tools/CodexMonitor/README.md)：通过本地 Hook 采集多会话生命周期与审批状态，提供隐私保护、回归测试和只读诊断。用户 Hook 现启用可回退的事件关联侧文件；只有新事件与真实宿主配对的会话可进入显式状态实验，历史会话保持 unknown。上位机可通过 USB 或已配对的 WSS 传输。
 
-Windows 上位机统一在 [Tools/Desktop](Tools/Desktop/README.md)，使用 Tauri + React + Microsoft Fluent UI 界面和共享 Python 控制层；旧 Tk 程序已移除。界面参考 WinUI Gallery，模块化布局，设置页提供浅色、深色、跟随系统三张预览卡，切换后记住选择。支持 USB、本地灯光、Codex 监控、诊断和设置；六位码 WSS 配对、重连认证及无线灯光/监控已接入隔离实验，用户确认拔掉 USB 后仍可无线控制。验证边界见 [PAIRING.md](Tools/DeviceBridge/PAIRING.md)。完整灯光及跨连接最终输出读回仍待接入。便携包唯一启动入口为 `Tools/Desktop/release/OmiPet/Omi.exe`。
+Windows 上位机统一在 [Tools/Desktop](Tools/Desktop/README.md)，使用 Tauri + React + Microsoft Fluent UI 界面和共享 Python 控制层；旧 Tk 程序已移除。界面参考 WinUI Gallery，模块化布局，设置页提供浅色、深色、跟随系统三张预览卡，切换后记住选择。支持 USB、本地灯光、Codex 监控、诊断和设置；六位码 WSS 配对、重连认证及无线灯光/监控已接入隔离实验，用户确认拔掉 USB 后仍可无线控制。验证边界见 [PAIRING.md](Tools/DeviceBridge/PAIRING.md)。完整灯光及跨连接最终输出读回仍待接入。便携包唯一启动入口为 `Tools/Desktop/release/OmiPet/Omi.exe`。 新用户通过程序内向导安装采集组件并完成 Codex Hook 信任，步骤见 [快速开始](Tools/Desktop/QUICK_START.md)，源码分层见 [Tools](Tools/README.md)。
 
 USB/Wi-Fi 共用协议与主机工具见 [Tools/DeviceBridge](Tools/DeviceBridge/README.md)。当前设备原应用支持扩散监控灯：无事件/完成/来源异常绿，运行红，审批黄；监控断联或租约结束关灯，语音优先，唤醒显示白色跑马灯。监控中禁止上位机手动调灯。协议仍区分 unknown 与 idle，绿色是显示策略，不伪造状态。
 

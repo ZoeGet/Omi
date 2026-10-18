@@ -24,7 +24,7 @@ try {
     $legacyExecutable = Join-Path $releaseDirectory "OmiPet.exe"
     if (Test-Path -LiteralPath $legacyExecutable) { Remove-Item -LiteralPath $legacyExecutable -Force }
     Copy-Item -LiteralPath $helperDirectory -Destination (Join-Path $PSScriptRoot "src-tauri/target/release") -Recurse -Force
-    foreach ($name in @("README.md", "THIRD_PARTY_NOTICES.md")) {
+    foreach ($name in @("QUICK_START.md", "README.md", "THIRD_PARTY_NOTICES.md")) {
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $releaseDirectory -Force
     }
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot "src-tauri/icons/README.md") -Destination (Join-Path $releaseDirectory "APP_ICON_SOURCE.md") -Force

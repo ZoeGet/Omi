@@ -7,6 +7,15 @@ use std::{
     sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex},
 };
 use tauri::Manager;
+use tauri::{menu::{Menu, MenuItem, PredefinedMenuItem}, tray::{TrayIconBuilder, TrayIconEvent, MouseButton, MouseButtonState}};
+
+mod window_behavior;
+
+#[derive(Default)]
+struct WindowBehavior {
+    exit_on_close: AtomicBool,
+    tray_available: AtomicBool,
+}
 
 struct Process {
     child: Child,
@@ -92,26 +101,117 @@ async fn request(window: tauri::WebviewWindow, state: tauri::State<'_, Backend>,
     tauri::async_runtime::spawn_blocking(move || backend.call(message)).await.map_err(|e| e.to_string())?
 }
 
+fn show_window(app: &tauri::AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+}
+
+fn exit_app(app: &tauri::AppHandle) {
+    let backend = app.state::<Backend>().inner().clone();
+    if backend.closing.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_title("Omi · 正在释放设备连接…");
+    }
+    let app = app.clone();
+    std::thread::spawn(move || {
+        //  所有退出入口先完成原有释放，再结束托盘和进程 / Every exit path completes the existing release before ending the tray and process
+        backend.close();
+        app.exit(0);
+    });
+}
+
+#[tauri::command]
+fn window_control(window: tauri::WebviewWindow, action: String, behavior: Option<String>) -> Result<Value, String> {
+    if window.label() != "main" {
+        return Err("此窗口无应用控制权限。".into());
+    }
+    let app = window.app_handle();
+    if app.state::<Backend>().closing.load(Ordering::SeqCst) {
+        return Err("正在释放设备连接…".into());
+    }
+    let state = app.state::<WindowBehavior>();
+    match action.as_str() {
+        "settings" => {},
+        "close-behavior" => {
+            let path = app.path().app_config_dir().map_err(|e| e.to_string())?.join("window.json");
+            let exit = window_behavior::save(&path, behavior.as_deref().ok_or("缺少关闭行为。")?)?;
+            state.exit_on_close.store(exit, Ordering::SeqCst);
+        },
+        "hide" => {
+            if !state.tray_available.load(Ordering::SeqCst) {
+                return Err("托盘不可用，已保留主窗口。".into());
+            }
+            window.hide().map_err(|e| format!("无法隐藏窗口：{e}"))?;
+        },
+        "quit" => exit_app(app),
+        _ => return Err("无效的应用控制操作。".into()),
+    }
+    Ok(json!({"closeBehavior": if state.exit_on_close.load(Ordering::SeqCst) {"exit"} else {"tray"},
+              "trayAvailable": state.tray_available.load(Ordering::SeqCst)}))
+}
+
 fn main() {
     tauri::Builder::default()
         .manage(Backend::default())
+        .manage(WindowBehavior::default())
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![request])
+        .invoke_handler(tauri::generate_handler![request, window_control])
+        .setup(|app| {
+            if let Ok(path) = app.path().app_config_dir() {
+                app.state::<WindowBehavior>().exit_on_close.store(window_behavior::read(&path.join("window.json")), Ordering::SeqCst);
+            }
+            let show = MenuItem::with_id(app, "show", "显示主窗口", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "退出软件", true, None::<&str>)?;
+            let separator = PredefinedMenuItem::separator(app)?;
+            let menu = Menu::with_items(app, &[&show, &separator, &quit])?;
+            if let Some(icon) = app.default_window_icon() {
+                let tray = TrayIconBuilder::with_id("omi-tray")
+                    .icon(icon.clone())
+                    .tooltip("Omi · 设备控制中心（右键退出）")
+                    .menu(&menu)
+                    .show_menu_on_left_click(false)
+                    .on_menu_event(|app, event| match event.id.as_ref() {
+                        "show" => show_window(app),
+                        "quit" => exit_app(app),
+                        _ => {},
+                    })
+                    .on_tray_icon_event(|tray, event| {
+                        if matches!(event, TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. }) {
+                            show_window(tray.app_handle());
+                        }
+                    }).build(app);
+                app.state::<WindowBehavior>().tray_available.store(tray.is_ok(), Ordering::SeqCst);
+            }
+            Ok(())
+        })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
-                let backend = window.state::<Backend>().inner().clone();
-                if backend.closing.swap(true, Ordering::SeqCst) {
+                let app = window.app_handle();
+                if app.state::<Backend>().closing.load(Ordering::SeqCst) {
                     return;
                 }
-                let window = window.clone();
-                let _ = window.set_title("Omi · 正在释放设备连接…");
-                std::thread::spawn(move || {
-                    backend.close();
-                    let _ = window.destroy();
-                });
+                let behavior = app.state::<WindowBehavior>();
+                if !behavior.exit_on_close.load(Ordering::SeqCst) && behavior.tray_available.load(Ordering::SeqCst) {
+                    let _ = window.hide();
+                } else {
+                    exit_app(app);
+                }
             }
         })
-        .run(tauri::generate_context!())
-        .expect("OmiPet failed to start");
+        .build(tauri::generate_context!())
+        .expect("OmiPet failed to start")
+        .run(|app, event| {
+            if let tauri::RunEvent::ExitRequested { api, .. } = event {
+                if !app.state::<Backend>().closing.load(Ordering::SeqCst) {
+                    api.prevent_exit();
+                    exit_app(app);
+                }
+            }
+        });
 }

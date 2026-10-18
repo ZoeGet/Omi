@@ -5,7 +5,9 @@ import App from './App';
 import type { Snapshot, WorkerEvent } from './backend';
 
 const bridge = vi.hoisted(() => ({ native: true, invoke: vi.fn(), events: [] as WorkerEvent[] }));
-vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => bridge.native, invoke: bridge.invoke }));
+vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => bridge.native,
+  invoke: (command: string, args: unknown) => command === 'window_control'
+    ? Promise.resolve({ closeBehavior: 'tray', trayAvailable: true }) : bridge.invoke(command, args) }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
 vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ setTheme: vi.fn().mockResolvedValue(undefined) }) }));
 const local: Snapshot = { state: { mode: 'local', leaseActive: false, displayStatus: 'unknown', monitorOutput: 'local' },
@@ -26,11 +28,51 @@ beforeEach(() => {
   bridge.native = true;
   bridge.events = [];
   bridge.invoke.mockReset().mockImplementation(async (_command, { message }) => ({ ok: true,
-    result: message.action === 'init' ? { demo: false, root: 'C:/state', bindings: 'C:/binding.json', ports: [{ device: 'COM17', description: 'OmiPet' }] } : message.action === 'paired-devices' ? [] : null,
+    result: message.action === 'init' ? { demo: false, root: 'C:/state', bindings: 'C:/binding.json', ports: [{ device: 'COM17', description: 'OmiPet' }] }
+      : message.action === 'monitor-setup-status' ? { state: 'not-installed', message: '尚未配置 Codex 监控', packaged: true, candidates: ['C:/Codex.exe'], home: 'C:/codex', root: 'C:/state' }
+      : message.action === 'paired-devices' ? [] : null,
     events: bridge.events.splice(0) }));
 });
 
 describe('USB desktop', () => {
+  it('requires explicit repair selection and clears the new screen code on submit', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: '无线配对' }));
+    await user.type(screen.getByLabelText('设备地址'), '192.0.2.42');
+    await user.type(screen.getByLabelText('六位配对码'), '654321');
+    await user.click(screen.getByRole('checkbox', { name: '我确认重新配对，成功后旧电脑的配对凭据将失效' }));
+    await user.click(screen.getByRole('button', { name: '重新配对' }));
+    expect(bridge.invoke.mock.calls.some(([, args]) => args.message.action === 're-pair'
+      && args.message.body.address === '192.0.2.42' && args.message.body.code === '654321')).toBe(true);
+    expect((screen.getByLabelText('六位配对码') as HTMLInputElement).value).toBe('');
+    expect(screen.queryByText('重新配对成功，旧配对凭据已失效。')).toBeNull();
+    bridge.events.push({ kind: 'pairing', command: 're-pair', ok: true });
+    await screen.findByText('重新配对成功，旧配对凭据已失效。');
+  });
+  it('finds a paired device after a network change and allows authenticated manual address updates', async () => {
+    let address = 'wss://192.0.2.1:8443/pair';
+    bridge.invoke.mockImplementation(async (_command, { message }) => ({ ok: true,
+      result: message.action === 'init' ? { demo: false, root: 'C:/state', bindings: 'C:/binding.json', ports: [] }
+        : message.action === 'paired-devices' ? [{ address, confirmed: true }] : null,
+      events: bridge.events.splice(0) }));
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: '无线配对' }));
+    await user.click(await screen.findByRole('button', { name: '在当前网络查找' }));
+    expect(bridge.invoke.mock.calls.some(([, args]) => args.message.action === 'find-wireless'
+      && args.message.body.address === address)).toBe(true);
+    expect((screen.getByRole('button', { name: '无线连接' }) as HTMLButtonElement).disabled).toBe(true);
+    address = 'wss://192.0.2.42:8443/pair';
+    bridge.events.push({ kind: 'pairing', ok: true, command: 'find-wireless', port: address });
+    await screen.findByText(address, { selector: 'strong' });
+    await user.click(screen.getByRole('button', { name: '修改地址' }));
+    await user.type(screen.getByLabelText('设备新地址'), '192.0.2.43');
+    await user.click(screen.getByRole('button', { name: '验证并保存地址' }));
+    expect(bridge.invoke.mock.calls.some(([, args]) => args.message.action === 'relocate-wireless'
+      && args.message.body.previous === address && args.message.body.address === '192.0.2.43')).toBe(true);
+    expect(bridge.invoke.mock.calls.some(([, args]) => args.message.action === 'pair')).toBe(false);
+  });
   it('connects a saved wireless device and uses the shared controls', async () => {
     bridge.invoke.mockImplementation(async (_command, { message }) => ({ ok: true,
       result: message.action === 'init' ? { demo: false, root: 'C:/state', bindings: 'C:/binding.json', ports: [] }

@@ -5,7 +5,7 @@ export type Light = { effect: string; red: number; green: number; blue: number; 
 export type Port = { device: string; description: string };
 export type Settings = { port: string; root: string; bindings: string };
 export type MonitorProfile = { revision: number; profiles: Record<string, Light> };
-type RequestBody = Settings | Light | MonitorProfile | { address: string; code?: string } | null;
+type RequestBody = Settings | Light | MonitorProfile | { address: string; code?: string; previous?: string } | { images: string[] } | null;
 export type Snapshot = {
   state: { mode: string; displayStatus: string; monitorOutput?: string; leaseActive: boolean } | null;
   monitorRequested: boolean; monitorLights: boolean; monitorGreenOff: boolean; operations: string[];
@@ -32,7 +32,7 @@ const errors: Record<string, string> = {
   'voice-active': '设备正在响应语音，请稍后再应用灯光。',
   'usb-priority': 'USB 连接优先，请先断开 USB 控制再通过无线调灯。',
   'wireless-pairing-required': '请先在无线配对页保存此设备。',
-  'wireless-authentication-failed': '无线设备认证失败，请检查网络和已保存的设备地址。',
+  'wireless-authentication-failed': '无线设备认证失败；换网后请到无线配对页，点击在当前网络查找。',
   'wireless-disconnected': '无线连接已断开，等待重新连接。',
   'wireless-send-failed': '无线发送失败，请检查设备网络。',
   'wireless-receive-failed': '无线接收失败，请检查设备网络。',
@@ -69,7 +69,9 @@ export function applyEvents(state: State, events: WorkerEvent[]): State {
         break;
       case 'pairing':
         state = log({ ...state, busy: false }, event.ok
-          ? event.command === 'pair' ? '无线配对已保存。' : '无线设备身份验证通过。'
+          ? event.command === 'pair' ? '无线配对已保存。'
+            : event.command === 're-pair' ? '重新配对成功，旧配对凭据已失效。'
+            : ['find-wireless', 'relocate-wireless'].includes(event.command!) ? `已验证原设备并保存当前地址：${event.port}，无需重新配对。` : '无线设备身份验证通过。'
           : event.error!);
         break;
       case 'update-error':

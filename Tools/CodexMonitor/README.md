@@ -26,6 +26,8 @@ Windows 主机端工具，读取 Codex Hook 的生命周期 JSON，按会话、�
 
 ## 安装 / Setup
 
+普通 Windows 用户使用完整 Omi 发布包中的首次监控向导，见 [快速开始](../Desktop/QUICK_START.md)。下面的 Python 手动安装流程保留供开发者调试和历史部署维护。桌面包使用内置运行环境执行同一生命周期/绑定逻辑，安装后的就绪检测必须等待真实新事件；不会自动授予 Hook 信任。
+
 1. 备份已有 `~/.codex/hooks.json`，以及已有的 `~/.codex/hooks/omipet-monitor/collector.py`。保留旧状态目录作为回退证据。
 2. 将本目录的 `collector.py` 复制到 `~/.codex/hooks/omipet-monitor/collector.py`。
 3. 在仓库根目录运行以下命令，生成与当前解释器、安装路径对应的配置预览：
@@ -89,7 +91,7 @@ CLI 默认未设置新鲜度策略，各会话显示 `unknown`，不会将历史
 
 2026-10-16 一致性修复：`bound_collector.py` 在原有同目录互斥锁内完成生命周期与侧文件发布，桌面读取同样持有这把锁，避免新快照配上旧证明而短暂降级。锁的原有 1 秒等待上限不变；无法取得锁时仍显示 unknown 并清除延续资格，不沿用未核验状态。桌面后台和已安装包装器需配套更新；只升级其中一个不能保证一致性。并发回归已先复现旧实现读到半次发布，再验证新实现等待完整发布后读到结束状态；此前 30 分钟的 3 次 unknown 缺少逐次原因，不能全部归因于这一竞态。
 
-`request_user_input` 的 Pre/Post 对应等待/回复完成；`request_user_input_async` 的 Post 只表示窗口已创建，等待需保留到 `UserPromptSubmit` 中对应 `send_user_message_question_reply` / `questionItemId` 回复，或中断/会话结束。待回复跨 Stop 保留，防止创建选项后结束本轮便错误变绿；其他工具调用与无关联文本不清除它。自由输入选项使用同一回复关联，不保存问题、选项或回答文本。该应用回复格式来自本机实测，非通用 Hooks 稳定协议；格式改变需重新验证。[官方 Hooks 文档](https://learn.chatgpt.com/docs/hooks) 的工具返回事件不能等同异步人工回复。
+`request_user_input` 的 Pre/Post 对应等待/回复完成；`request_user_input_async` 的 Post 只表示窗口已创建，等待需保留到 `UserPromptSubmit` 中对应 `send_user_message_question_reply` / `questionItemId` 回复，或中断/会话结束。待回复跨 Stop 保留，防止创建选项后结束本轮便错误变绿；其他工具调用与无关联文本不清除它。同一聊天继续执行时显示 working，只有没有正在执行的轮次而仍有异步待回复问题时显示 waitingApproval；真实权限审批和同步输入仍优先显示 waitingApproval。不同聊天之间仍保持等待优先。自由输入选项使用同一回复关联，不保存问题、选项或回答文本。该应用回复格式来自本机实测，非通用 Hooks 稳定协议；格式改变需重新验证。[官方 Hooks 文档](https://learn.chatgpt.com/docs/hooks) 的工具返回事件不能等同异步人工回复。
 
 每个会话分别计算年龄，不使用全局快照生成时间刷新其他聊天。超期、未来时间、缺少时区或非法记录均显示未知；静默不会产生 `Stop`、`idle` 或 `offline`。汇总保留等待审批、工作、未知、空闲、离线的优先级，未知会阻止仅凭另一个空闲会话显示全局空闲。
 

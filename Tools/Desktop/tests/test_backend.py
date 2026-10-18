@@ -14,6 +14,22 @@ spec.loader.exec_module(module)
 
 
 class BackendTests(unittest.TestCase):
+    def test_setup_is_explicit_and_never_mutates_in_demo_or_connected_mode(self):
+        with patch('monitor_setup.MonitorSetup') as setup:
+            setup.return_value.status.return_value = dict(state='not-installed')
+            self.assertTrue(self.request('monitor-setup-status')['ok'])
+            self.assertFalse(self.request('monitor-setup-install', dict(images=['C:/Codex.exe']))['ok'])
+            self.assertFalse(self.request('monitor-setup-uninstall')['ok'])
+            setup.return_value.install.assert_not_called()
+            self.backend.demo = False
+            self.backend.connected = True
+            self.assertFalse(self.request('monitor-setup-uninstall')['ok'])
+            self.backend.connected = False
+            self.assertFalse(self.request('monitor-setup-install', dict(extra=True))['ok'])
+            setup.return_value.install.return_value = dict(message='installed')
+            self.assertTrue(self.request('monitor-setup-install', dict(images=['C:/Codex.exe']))['ok'])
+            setup.return_value.install.assert_called_once_with(['C:/Codex.exe'])
+
     def test_pairing_runs_off_request_thread_and_redacts_errors(self):
         self.backend.demo = False
         entered, release = module.threading.Event(), module.threading.Event()
@@ -32,6 +48,33 @@ class BackendTests(unittest.TestCase):
             event = self.wait_for("pairing")
             self.assertFalse(event["ok"])
             self.assertNotIn("123456", json.dumps(event))
+
+    def test_find_and_manual_migration_use_background_worker_and_report_verified_address(self):
+        self.backend.demo = False
+        for action, target in (("find-wireless", "wireless_discovery.find_device"),
+                               ("relocate-wireless", "wireless_pairing.relocate_device")):
+            body = dict(address="192.0.2.1")
+            if action == "relocate-wireless": body["previous"] = "192.0.2.9"
+            with patch(target, return_value="wss://192.0.2.42:8443/pair") as operation:
+                self.assertTrue(self.request(action, body)["ok"])
+                event = self.wait_for("pairing")
+                self.assertTrue(event["ok"])
+                self.assertEqual(event["port"], "wss://192.0.2.42:8443/pair")
+                operation.assert_called_once()
+                self.assertIs(operation.call_args.kwargs["stop"], self.backend.pairing_stop)
+            self.backend.pairing_worker.join()
+        self.assertFalse(self.request("relocate-wireless", dict(address="192.0.2.1"))["ok"])
+        self.backend.connected = True
+        self.assertFalse(self.request("find-wireless", dict(address="192.0.2.1"))["ok"])
+
+    def test_repair_requires_explicit_command_and_six_digit_code(self):
+        self.backend.demo = False
+        for code in ("12345", "abcdef", "１２３４５６"):
+            self.assertFalse(self.request("re-pair", dict(address="192.0.2.1", code=code))["ok"])
+        with patch("wireless_pairing.pair_device") as pair:
+            self.assertTrue(self.request("re-pair", dict(address="192.0.2.1", code="123456"))["ok"])
+            self.assertTrue(self.wait_for("pairing")["ok"])
+            self.assertTrue(pair.call_args.kwargs["replace"])
 
     def setUp(self):
         self.backend = module.Backend(demo=True)
