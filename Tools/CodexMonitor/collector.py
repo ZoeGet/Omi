@@ -50,12 +50,13 @@ def atomic_json(path, data):
 
 def new_turn(turn_id):
     return dict(turnId=turn_id, closed=False, baseStatus="working", pendingToolIds=[],
-                completedToolIds=[], pendingInputIds=[], completedInputIds=[],
+                completedToolIds=[], pendingInputIds=[], asyncInputIds=[], completedInputIds=[],
                 unattributedApproval=False, approvalUnconfirmed=False)
 
 
 def turn_status(state):
-    if state.get("pendingInputIds"):
+    if state.get("pendingInputIds") and (state["closed"] or
+            set(state["pendingInputIds"]) - set(state.get("asyncInputIds", []))):
         return "waitingApproval"
     if state["closed"]:
         return "idle"
@@ -115,6 +116,7 @@ def collect(root, payload):
         for state in turns.values():
             state.setdefault("pendingInputIds", [])
             state.setdefault("completedInputIds", [])
+            state.setdefault("asyncInputIds", [])
         baseline = previous.get("baselineStatus", "unknown")
         session_closed = previous.get("status") == "offline"
         if previous.get("schema") == 1 and previous.get("turnId"):
@@ -160,6 +162,8 @@ def collect(root, payload):
                     if event_name == "PreToolUse" and tool_id and tool_id not in state["completedInputIds"]:
                         if tool_id not in state["pendingInputIds"]:
                             state["pendingInputIds"].append(tool_id)
+                        if payload["tool_name"] == "request_user_input_async" and tool_id not in state["asyncInputIds"]:
+                            state["asyncInputIds"].append(tool_id)
                     elif event_name == "PostToolUse" and tool_id and payload["tool_name"] == "request_user_input":
                         state["pendingInputIds"] = [key for key in state["pendingInputIds"] if key != tool_id]
                         if tool_id not in state["completedInputIds"]:
@@ -189,7 +193,10 @@ def collect(root, payload):
             selected_status = turn_status(state)
 
         active = [state for state in turns.values() if not state["closed"] or state["pendingInputIds"]]
-        status = "offline" if session_closed else aggregate([turn_status(state) for state in active], baseline)
+        #  旧异步问题不覆盖同一聊天正在执行的新任务，真实审批仍优先。 / Old async questions do not mask running work in the same chat; approvals retain priority.
+        running = any(not state["closed"] and turn_status(state) == "working" for state in active)
+        displayed = [state for state in active if not (running and state["closed"] and state["pendingInputIds"])]
+        status = "offline" if session_closed else aggregate([turn_status(state) for state in displayed], baseline)
         received_at = timestamp()
         metadata = dict(schema=2, sessionId=session_id, status=status, turnId=turn_id,
                         cwd=str(payload.get("cwd") or ""),
