@@ -8,7 +8,7 @@ OmiPet 是一个面向桌面陪伴场景的开源软硬件项目：它以 ESP32-
 
 ## 项目状态 / Project Status
 
-当前项目已经完成基础硬件驱动和第一阶段麦克风采集验证：
+当前项目包含设备固件、Windows 控制中心和 Codex 生命周期采集器。基础硬件与语音路径已有实测；桌面/无线能力在默认关闭的隔离固件中启用：
 
 - NV3007 `142 × 428` LCD 基础驱动和桌面宠物 UI。
 - AHT20 温湿度采集、CRC 校验和整机热影响补偿。
@@ -19,7 +19,10 @@ OmiPet 是一个面向桌面陪伴场景的开源软硬件项目：它以 ESP32-
 - Wi-Fi 连接后通过 NTP 获取本地时间和日期；断网时显示占位符，不使用编译时间或假时间。
 - BAT_ADC 电池电压采样和单节锂电估算电量显示；百分比仍需结合实测电池曲线校准。
 - ICS-43434 原始 I²S 采集、RMS 音量分析、自适应语音活动检测和 16-bit PCM 音频帧适配。
-- ESP-SR v1.2.0 中文 MultiNet `mn6_cn` 命令识别、独立模型分区和自定义短语“老鼠狒狒”实验链路。
+- ESP-SR v1.2.0 中文 MultiNet `mn6_cn`，当前 47 条短语、命令 ID 1–17，包含亮度、颜色、动效与语音开启配对。
+- 唯一 Windows 上位机 `Tools/Desktop`：首页 USB / Wi-Fi 连接、灯光与五种监控状态配置、配对管理、首次监控配置向导、托盘和持久化主题。
+
+离线语音识别与调灯无需 Wi-Fi；联网是配对/无线控制和 NTP 的条件，不是语音识别的前提。
 
 当前固件不启用 WakeNet，也不把现成唤醒词冒充为产品唤醒词；“老鼠狒狒”通过中文 MultiNet 自定义命令词表作为唤醒入口，仍属于低延迟和误识别特性待继续验证的实验方案。
 
@@ -83,7 +86,7 @@ OmiPetAudio::microphone.begin(
 
 ### 语音交互状态 / Voice interaction state
 
-当前固件使用 `16 kHz`、`16-bit`、单声道 PCM，将每次 `160` 个采样点的输入帧送入 AFE；AFE 以约 `512` 个采样点的输出帧驱动中文 MultiNet `mn6_cn`。词表包含灯带颜色/动效、亮度控制短语和自定义入口“老鼠狒狒”（命令 ID `1`）。识别到入口后，状态机播放约 `180 ms` 的三段式确认反馈，进入 `LISTENING` 等待灯带控制指令，同时用独立的白色跑马灯表示已唤醒；命令执行或等待超时后结束这一临时提示。
+当前固件使用 `16 kHz`、`16-bit`、单声道 PCM，将每次 `160` 个采样点的输入帧送入 AFE；AFE 以约 `512` 个采样点的输出帧驱动中文 MultiNet `mn6_cn`。词表包含自定义入口“老鼠狒狒”（ID `1`）、亮度（ID `2/3`）、颜色与动效（ID `4–16`）及“开启配对模式”（ID `17`）。识别到入口后，状态机播放约 `180 ms` 的三段式确认反馈，进入最长 5 秒的 `LISTENING` 等待已配置的灯带或配对命令，同时用独立的白色跑马灯表示已唤醒；命令执行或等待超时后结束这一临时提示。
 
 ### 灯带颜色与动效 / LED Colors and Effects
 
@@ -93,7 +96,7 @@ OmiPetAudio::microphone.begin(
 
 AFE 和 I²S 始终持续运行，但 VAD 只在检测到语音以及语音结束后的 `1.2 s` 尾窗内调用 MultiNet；这样避免待机时持续推理造成 CPU 调度和看门狗风险，同时尽量保留词尾。该门控策略不会承诺每次都在说话过程中返回，MultiNet 本身仍可能需要积累判定窗口。
 
-> **English** — The firmware uses `16 kHz`, `16-bit`, mono PCM. It feeds `160`-sample input frames into AFE, which produces approximately `512`-sample frames for Chinese MultiNet `mn6_cn`. The phrase list contains brightness commands and the custom “老鼠狒狒” entry (command ID `1`). After detection, the state machine plays an approximately `180 ms` three-phase acknowledgement and listens for natural-language commands such as “亮一点” or “暗一点”.
+> **English** — The firmware uses `16 kHz`, `16-bit`, mono PCM. It feeds `160`-sample input frames into AFE, which produces approximately `512`-sample frames for Chinese MultiNet `mn6_cn`. The current list has 47 phrases across command IDs 1–17: wake entry, brightness, colors/effects, and opening pairing mode. After detection, the state machine plays an approximately `180 ms` three-phase acknowledgement and listens for configured phrases such as “亮一点”, “暗一点”, or “开启配对模式”; this is finite-vocabulary recognition, not open-ended speech understanding.
 
 I²S and AFE remain active continuously, while VAD gates MultiNet detection to speech activity plus a `1.2 s` hangover. This reduces idle inference load and watchdog risk while preserving phrase endings; it does not guarantee that MultiNet returns before the speaker finishes a phrase.
 
@@ -138,10 +141,10 @@ VAD 语音窗口 + 1.2 s 尾窗门控
     ↓
 ESP-SR MultiNet `mn6_cn`
     ↓
-命令 ID → 唤醒状态机或灯带业务
+命令 ID → 唤醒状态机、灯带业务或本机配对请求
 ```
 
-I²S、PCM 队列和 AFE 会持续运行，但 MultiNet 只在检测到语音活动或最近 `1.2 s` 的语音尾窗内进行判定。这样可以避免空闲时持续运行 MultiNet 引起 CPU 调度压力和看门狗风险，同时尽量保留词尾音频。
+I²S、PCM 队列和 AFE 会持续运行，但 MultiNet 只在检测到语音活动或最近 `1.2 s` 的语音尾窗内进行判定。门控使用 `main.cpp` 的 RMS、自适应噪声底与连续窗口迟滞；AFE 自带 VAD 虽开启，但不是 `allowDetection` 的直接输入。这样可以避免空闲时持续运行 MultiNet 引起 CPU 调度压力和看门狗风险，同时尽量保留词尾音频。
 
 ### “老鼠狒狒”如何实现 / How “老鼠狒狒” is implemented
 
@@ -158,10 +161,10 @@ I²S、PCM 队列和 AFE 会持续运行，但 MultiNet 只在检测到语音活
 1. 清空上一段 AFE/MultiNet 上下文；
 2. 通知 `VoiceController` 进入 `LISTENING`；
 3. 播放非阻塞双音确认反馈；
-4. 在超时时间内等待 ID `2` 或 ID `3`；
-5. 按 ID `2/3` 将亮度增加或降低 `16/255`，然后回到持续监听。
+4. 在 5 秒监听期内接受 ID `2–17` 的已配置命令；
+5. ID `2/3` 调整亮度 `16/255`，ID `4–16` 控制颜色/动效，ID `17` 请求限时配对窗口；命令完成或超时后回到持续监听。无线功能未启用或未就绪时，配对请求返回 `PAIR UNREADY`。
 
-命令词的唯一修改入口是 `Firmware/include/voice_command_config.h`。修改或新增数组项即可维护唤醒词、同义表达和后续命令；不要直接修改构建目录内的 `multinet_commands_cn.txt`，也不要修改自动生成的 `Firmware/include/generated_multinet_commands.h`。构建检查会拒绝空配置、重复短语、非正 ID、非法拼音、超过 MultiNet 长度/数量上限的配置，并确保 ID `1/2/3` 仍然存在且 ID `1` 只有一条。
+命令词的唯一修改入口是 `Firmware/include/voice_command_config.h`。修改或新增数组项即可维护唤醒词、同义表达和后续命令；不要直接修改构建目录内的 `multinet_commands_cn.txt`，也不要修改自动生成的 `Firmware/include/generated_multinet_commands.h`。构建检查会拒绝空配置、重复短语、非正 ID、非法拼音、超过 MultiNet 长度/数量上限的配置，并确保当前运行时必需的 ID `1–17` 与头文件一致，且 ID `1` 只有一条短语。
 
 更换或新增步骤：编辑 `Firmware/include/voice_command_config.h` → 修改/增加 `{命令ID, "无声调拼音"}` → 重新构建 → PlatformIO 自动同步词表、生成运行时表并把 `model.bin` 加入烧录列表 → 将应用固件和模型分区一起烧录 → 查看 `[ASR] continuous experiment wake_id=1 phrase=...` 日志并实测。新增命令词会自动注册，但要让设备执行新的业务动作，还必须在 `Firmware/src/main.cpp` 中为该命令 ID 增加业务分派；配置入口不会凭空生成未实现的业务逻辑。
 
@@ -175,9 +178,9 @@ WakeNet 是专门的唤醒模型，但当前 ESP-SR 模型包中的现成模型�
 
 本项目当前没有“老鼠狒狒”的定制 WakeNet 模型，而项目目标又明确要求自定义唤醒词，因此不能直接使用现成 WakeNet 冒充已经实现了目标词。当前配置明确关闭 WakeNet：`CONFIG_USE_WAKENET=n`，运行时 AFE 配置也设置 `wakenet_init = false`。
 
-选择 MultiNet 自定义命令词作为实验入口，是因为它允许我们在现有中文 `mn6_cn` 模型上注册自己的拼音短语，不需要等待或伪造一个不存在的定制 WakeNet 模型。代价是 MultiNet 不是低延迟专用唤醒引擎：当前实测“老鼠狒狒”通常在语音结束后还要等待约 `1.1–1.3 s`，并且仍需继续验证误识别、误触发和长期稳定性。
+选择 MultiNet 自定义命令词作为实验入口，是因为它允许我们在现有中文 `mn6_cn` 模型上注册自己的拼音短语，不需要等待或伪造一个不存在的定制 WakeNet 模型。代价是 MultiNet 不是低延迟专用唤醒引擎：早期词表短测中，“老鼠狒狒”在语音结束后曾等待约 `1.1–1.3 s`；当前 47 词模型的延迟尚未完成统计，并且仍需继续验证误识别、误触发和长期稳定性。
 
-> **English** — WakeNet is a dedicated wake-word model, but the bundled model is trained for fixed phrases such as `Hi ESP`. Changing a configuration string does not retrain the neural network. A real custom WakeNet phrase requires a matching custom model, followed by model packaging, capacity checks, false-trigger testing, and missed-wake testing. Because this project does not currently have a custom “老鼠狒狒” WakeNet model, WakeNet is explicitly disabled. MultiNet custom commands provide a workable offline experimental entry, but they are not a low-latency dedicated wake engine; the current measured wake-result delay is typically about `1.1–1.3 s` after speech ends.
+> **English** — WakeNet is a dedicated wake-word model, but the bundled model is trained for fixed phrases such as `Hi ESP`. Changing a configuration string does not retrain the neural network. A real custom WakeNet phrase requires a matching custom model, followed by model packaging, capacity checks, false-trigger testing, and missed-wake testing. Because this project does not currently have a custom “老鼠狒狒” WakeNet model, WakeNet is explicitly disabled. MultiNet custom commands provide a workable offline experimental entry, but they are not a low-latency dedicated wake engine; an earlier phrase-list test observed about `1.1–1.3 s` after speech ended. The current 47-phrase model still needs latency and long-run statistics.
 
 ### 关键构建文件 / Important build files
 
@@ -186,7 +189,7 @@ WakeNet 是专门的唤醒模型，但当前 ESP-SR 模型包中的现成模型�
 - `Firmware/src/CMakeLists.txt`：注册固件源文件并声明 `esp-sr` 组件依赖。
 - `Firmware/sdkconfig.defaults`：启用 AFE、中文 MultiNet、模型分区、16 MB Flash 和 OPI PSRAM，并明确关闭 WakeNet。
 - `Firmware/components/esp-sr`：ESP-SR v1.2.0 子模块，提供 AFE/MultiNet 头文件、库和模型工具。
-- `Firmware/include/voice_command_config.h`：个人语音命令配置入口；集中维护命令 ID 和无声调拼音短语，ID `1` 为唤醒词，ID `2/3` 为亮度，ID `4–16` 为颜色和动效。
+- `Firmware/include/voice_command_config.h`：个人语音命令配置入口；集中维护命令 ID 和无声调拼音短语，ID `1` 为唤醒词，ID `2/3` 为亮度，ID `4–16` 为颜色和动效，ID `17` 为语音开启配对模式。
 - `Firmware/include/led_controller.h`、`Firmware/src/led_controller.cpp`：分离的 WS2812B 硬件缓存 `Strip` 和非阻塞动画控制器 `EffectController`。
 - `Firmware/scripts/check_multinet_commands.py`：构建前解析个人配置、同步词表、校验命令 ID/重复短语/容量，并生成 `Firmware/include/generated_multinet_commands.h`。
 - 构建目录的 `multinet_commands_cn.txt`：自动生成的模型输入，不纳入版本管理；唯一配置入口仍是 `voice_command_config.h`。
@@ -198,11 +201,11 @@ WakeNet 是专门的唤醒模型，但当前 ESP-SR 模型包中的现成模型�
 
 Windows 主机端工具见 [Tools/CodexMonitor](Tools/CodexMonitor/README.md)：通过本地 Hook 采集多会话生命周期与审批状态，提供隐私保护、回归测试和只读诊断。用户 Hook 现启用可回退的事件关联侧文件；只有新事件与真实宿主配对的会话可进入显式状态实验，历史会话保持 unknown。上位机可通过 USB 或已配对的 WSS 传输。
 
-Windows 上位机统一在 [Tools/Desktop](Tools/Desktop/README.md)，使用 Tauri + React + Microsoft Fluent UI 界面和共享 Python 控制层；旧 Tk 程序已移除。界面参考 WinUI Gallery，模块化布局，设置页提供浅色、深色、跟随系统三张预览卡，切换后记住选择。支持 USB、本地灯光、Codex 监控、诊断和设置；六位码 WSS 配对、重连认证及无线灯光/监控已接入隔离实验，用户确认拔掉 USB 后仍可无线控制。验证边界见 [PAIRING.md](Tools/DeviceBridge/PAIRING.md)。完整灯光及跨连接最终输出读回仍待接入。便携包唯一启动入口为 `Tools/Desktop/release/OmiPet/Omi.exe`。 新用户通过程序内向导安装采集组件并完成 Codex Hook 信任，步骤见 [快速开始](Tools/Desktop/QUICK_START.md)，源码分层见 [Tools](Tools/README.md)。
+Windows 上位机统一在 [Tools/Desktop](Tools/Desktop/README.md)，使用 Tauri + React + Microsoft Fluent UI 界面和共享 Python 控制层；旧 Tk 程序已移除。界面参考 WinUI Gallery，模块化布局，设置页提供浅色、深色、跟随系统三张预览卡，切换后记住选择。首页统一选择 USB 串口或已配对 Wi-Fi 设备，支持本地灯光、Codex 监控、诊断、配对管理与设置；六位码 WSS 配对、重连认证及无线灯光/监控已接入隔离实验，用户确认拔掉 USB 后仍可无线控制。验证边界见 [PAIRING.md](Tools/DeviceBridge/PAIRING.md)。完整灯光及跨连接最终输出读回仍待接入。便携包唯一启动入口为 `Tools/Desktop/release/OmiPet/Omi.exe`。新用户通过程序内向导安装采集组件并完成 Codex Hook 信任，步骤见 [快速开始](Tools/Desktop/QUICK_START.md)，源码分层见 [Tools](Tools/README.md)。
 
-USB/Wi-Fi 共用协议与主机工具见 [Tools/DeviceBridge](Tools/DeviceBridge/README.md)。当前设备原应用支持扩散监控灯：无事件/完成/来源异常绿，运行红，审批黄；监控断联或租约结束关灯，语音优先，唤醒显示白色跑马灯。监控中禁止上位机手动调灯。协议仍区分 unknown 与 idle，绿色是显示策略，不伪造状态。
+USB/Wi-Fi 共用协议与主机工具见 [Tools/DeviceBridge](Tools/DeviceBridge/README.md)。当前支持监控灯效的隔离固件按五种状态读取可配置的颜色、亮度和动效，并保存到 NVS。默认无事件/完成/来源异常绿、运行红、等待操作黄；同一聊天有旧异步问题时，后续实际运行显示红，停止运行且仍待回复时显示黄，真实审批与其他聊天的等待仍优先。监控断联或租约结束关灯，语音优先，唤醒显示白色跑马灯。监控中禁止上位机手动调灯。协议仍区分 unknown 与 idle，绿色是显示策略，不伪造状态。
 
-正式默认构建仍关闭协议实验，不能直接用默认构建替代当前支持上位机的设备固件；隔离构建入口和显式参数见协议文档。当前设备使用已授权的 20 ms USB 信号过滤隔离版，30 分钟更新全部确认、无新增断线；换珠后红白黄经用户确认正常。状态源现修复快照与宿主证明的并发读取竞态；此前 3 次 unknown 缺少逐次原因，长期状态稳定和完整语音/监控/断线目视验收仍待补。无自动后台桥接。
+正式默认构建仍关闭协议实验，不能直接用默认构建替代当前支持上位机的设备固件；隔离构建入口和显式参数见协议文档。当前设备已刷入保留 20 ms USB 过滤的语音重配隔离版及配套 5 MiB 模型；此前 USB 隔离版曾通过 30 分钟连续更新。重配测试出现过一次用户确认的自动断连，原因未定位，不能据旧长测承诺当前固件长期稳定。换珠后红白黄经用户确认正常。状态源现修复快照与宿主证明的并发读取竞态；此前 3 次 unknown 缺少逐次原因，长期状态稳定和完整语音/监控/断线目视验收仍待补。没有自动启动的设备桥接服务；托盘隐藏会保留既有监控连接，真正退出才释放。新版监控采集器仍需 Codex 信任与真实事件验收，五状态灯效的物理断电持久化仍待补验。
 
 ## 硬件资料 / Hardware Resources
 
@@ -226,6 +229,12 @@ OmiPet/
 │  ├─ Schematic/             # Schematic files / 原理图
 │  ├─ Images/                # Board photos / 实物照片
 │  └─ Enclosure/             # STEP enclosure models / STEP 外壳模型
+├─ Tools/
+│  ├─ Desktop/               # Windows 控制中心与打包 / Desktop app and packaging
+│  ├─ CodexMonitor/          # 生命周期采集与宿主校验 / Lifecycle and host checks
+│  ├─ DeviceBridge/          # USB/WSS 协议与配对 / Protocol and pairing
+│  └─ Repository/            # 源码发布检查 / Publication checks
+├─ CONTRIBUTING.md
 ├─ README.md
 └─ .gitignore
 ```
@@ -237,11 +246,14 @@ OmiPet/
 - VS Code + PlatformIO
 - ESP32-S3-WROOM-1-N16R8 或兼容的 ESP32-S3 开发板
 - USB 数据线
-- Arduino framework（由 PlatformIO 自动安装）
+- Arduino + ESP-IDF 双框架（由 PlatformIO 安装）；拉取 ESP-SR 子模块：`git submodule update --init --recursive`。
+- 只使用 Windows 程序时，完整解压便携包并运行 `Omi.exe` 即可，无需安装开发工具；见 [快速开始](Tools/Desktop/QUICK_START.md)。
 
 ### 编译、烧录和串口监视 / Build, Upload, and Monitor
 
-在仓库根目录执行：
+以下命令构建默认固件，**默认关闭 USB 桌面协议与无线服务**，不能直接替代当前支持上位机的设备镜像。要构建桌面/无线版本，先按 [隔离配置](Tools/DeviceBridge/README.md#构建与验证) 生成配置；应用与当前词表生成的模型需配套烧录。烧录前备份完整 Flash，并重新枚举实际串口。
+
+在仓库根目录执行默认构建：
 
 ```powershell
 cd Firmware
@@ -286,7 +298,11 @@ AHT20 上电初期的读数通常接近环境值。随着 ESP32-S3、LCD 背光�
 - [x] VAD 门控的 AFE/MultiNet 语音链路 / VAD-gated AFE/MultiNet voice pipeline
 - [x] “老鼠狒狒”自定义短语入口 / Custom “老鼠狒狒” phrase entry
 - [x] 唤醒后双音反馈状态机 / Post-wake dual-tone feedback state machine
-- [x] MultiNet 自然语言亮度指令 / MultiNet natural-language brightness commands
+- [x] MultiNet 有限词表的亮度、颜色和动效指令 / Finite-vocabulary lighting commands
+- [x] 语音开启配对与重配 / Voice-triggered pairing and re-pairing
+- [x] Windows 首页 USB/Wi-Fi、监控向导、主题、托盘 / Windows connections, setup wizard, themes, and tray
+- [x] 五状态监控灯效配置与 NVS 保存 / Five-state monitor profiles persisted in NVS
+- [ ] 五状态灯效物理断电、完整跨连接输出及异常边界验收 / Power-cut, cross-connection output, and failure-boundary validation
 - [ ] 降低 MultiNet 判定窗口延迟 / Reduce MultiNet decision-window latency
 - [ ] 扩展语音驱动的设备动作 / Expand voice-controlled device actions
 

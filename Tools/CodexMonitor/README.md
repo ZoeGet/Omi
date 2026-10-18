@@ -1,6 +1,6 @@
 # Codex 状态采集实验 / Codex lifecycle monitor
 
-Windows 主机端工具，读取 Codex Hook 的生命周期 JSON，按会话、轮次和工具调用 ID 保存状态。只使用 Python 标准库，需要 Python 3.10 或更新版本。
+Windows 主机端工具，读取 Codex Hook 的生命周期 JSON，按会话、轮次和工具调用 ID 保存状态。源码采集器只使用 Python 标准库，开发运行需 Python 3.10+；Windows 便携包已内置运行环境，终端用户无需安装 Python。
 
 本目录负责状态来源，不实现设备传输、灯带驱动或桌面气泡；相关设备功能见根目录 README。已有快照不能当作持续在线的证明。以下带日期的实验记录保留各次验证边界，后续结果以最新现状及 Git 历史为准。
 
@@ -11,13 +11,14 @@ Windows 主机端工具，读取 Codex Hook 的生命周期 JSON，按会话、�
 | `collector.py` | UTF-8 输入、Windows 互斥锁、审批关联及原子快照写入 |
 | `make_hooks.py` | 只向标准输出生成配置，不修改用户设置 |
 | `audit.py` | 只读诊断与按会话、轮次检查 |
-| `state_view.py` | 独立的只读失联策略候选，不安装到 Hook |
+| `state_view.py` | CLI 只读视图及桌面实际使用的 `LifecycleReader`，不作为 Hook 入口 |
 | `process_probe.py` | 只读核对 Windows 进程身份及退出信号，不推断会话状态 |
 | `host_observer.py` | 从 Hook 进程的父进程链采集独立宿主证据 |
 | `host_sample_collector.py` | 临时采样包装器，先执行原生命周期采集再隔离记录证据 |
 | `host_bindings.py` | 按同会话/轮次/调用的 Pre/Post 配对生成候选绑定 |
-| `bound_collector.py`、`host_binding_sidecar.py` | 可选的事件关联侧文件；原采集器先执行，失败时不阻断生命周期采集 |
+| `bound_collector.py`、`host_binding_sidecar.py` | 共享事件关联与原子发布；桌面 `hook_runner.py` 通过 `run` 复用，关联失败不阻断生命周期采集 |
 | `tests/test_approvals.py` | 隔离目录内的生命周期、隐私及多进程回归 |
+| `tests/test_input_requests.py`、`test_lifecycle_reader.py` | 同步/异步输入、同聊天运行与跨聊天优先级、桌面生命周期延续及失效 |
 | `tests/test_audit.py` | 缺失来源、目标隔离、损坏行及审批覆盖率测试 |
 | `tests/test_state_view.py` | 静默、过期、损坏、时钟异常及只读性测试 |
 | `tests/test_process_probe.py` | 进程身份、PID 重用、访问失败及真实隔离子进程测试 |
@@ -42,6 +43,8 @@ python Tools/CodexMonitor/make_hooks.py --collector $monitorCollectorPath
 4. 在 Codex 中审查并信任新定义。官方 CLI 入口为 `/hooks`；安装配置不代表已经受信任。不自动修改信任记录或使用信任绕过参数。
 5. 在正常聊天中验证新事件。审批只观察用户自行处理的请求，不自动批准、拒绝或制造危险操作。
 
+上述手动步骤仅安装基础采集器，不自动建立桌面监控所需的 schema 2 宿主关联。普通用户应使用完整向导安装；开发者手动包装需同时配置下文事件关联侧文件，不能把单独的 `collector.py` 快照当作桌面就绪。
+
 默认 `SessionStart`、`Stop`、`SessionEnd` 同步执行，其他事件异步执行；超时为 3 秒。异步事件可能乱序，不能将接收顺序当成操作发生顺序。另见 [官方 Hooks 文档](https://learn.chatgpt.com/docs/hooks)。
 
 ## 本地数据与隐私 / Local data and privacy
@@ -61,9 +64,9 @@ python Tools/CodexMonitor/make_hooks.py --collector $monitorCollectorPath
 
 | 状态 | 含义 |
 | --- | --- |
-| `working` | 有尚未结束的已观测轮次 |
-| `waitingApproval` | 存在已观测的待审批或待选项回复 |
-| `idle` | 已观测轮次收到结束/中断，且没有其他未结束轮次 |
+| `working` | 存在正在执行且未被同步输入或真实审批阻塞的已观测轮次 |
+| `waitingApproval` | 存在真实审批/同步输入，或当前无运行轮次而仍有异步待回复问题 |
+| `idle` | 已观测轮次结束/中断，且没有其他运行轮次或待回复问题 |
 | `offline` | 收到 `SessionEnd` |
 | `unknown` | 来源不足、关联不明或缺失必要标识 |
 
@@ -73,9 +76,9 @@ python Tools/CodexMonitor/make_hooks.py --collector $monitorCollectorPath
 
 通用 `PermissionRequest` 不保证提供调用 ID。缺失时，后续工具活动不能证明是哪一项审批结束，状态会降级为 `unknown`/`approvalUnconfirmed`，直到本轮结束。`PostToolUse` 只证明调用已返回，不能单独推断用户批准还是拒绝。
 
-按轮次保留已结束记录，可阻止迟到事件复活旧任务。记录尚未自动裁剪。汇总只覆盖已观测会话，不能代表 Desktop 所有聊天。采集器尚无心跳或进程退出恢复；长时间没有新事件不能证明空闲或仍在线。下面的独立视图仅提供候选显示策略。
+按轮次保留已结束记录，可阻止迟到事件复活旧任务。记录尚未自动裁剪。汇总只覆盖已观测会话，不能代表 Desktop 所有聊天。原始采集器不靠定时器制造业务事件；长时间没有新事件不能证明空闲或仍在线。桌面实际通过下文 `LifecycleReader` 校验宿主存活并延续已确认生命周期，但不提供独立逐聊天存活证明。
 
-## 只读失联策略候选 / Read-only source policy candidate
+## 只读视图与桌面生命周期 / Read-only views and desktop lifecycle
 
 `state_view.py` 不改写日志或快照，不修改安装与信任配置。它将历史观测和候选显示状态分开：
 
@@ -105,7 +108,7 @@ python Tools/CodexMonitor/tests/test_state_view.py
 
 2026-10-14：状态视图 16 项、进程探针 10 项、宿主观测/绑定 16 项和审计 5 项测试通过，其中包括 Windows 隔离子进程真实退出及联动降级。开启宿主采样后的包装器还通过 52 条生命周期事件和 6 会话并发回归，最长单次约 0.281 秒。视图尚未接串口或灯带；不能宣称真实 Codex 会话异常退出已被自动识别。
 
-## 进程证据候选 / Process evidence candidate
+## 进程证据 / Process evidence
 
 `process_probe.py` 通过 Windows 的查询和同步权限读取进程，不读取命令行、环境变量、内存或登录资料，不终止被观察进程。身份由 PID、原始 100 ns 创建时间字符串和完整映像路径共同组成；创建时间使用字符串以免 JSON 数值精度损失。
 
@@ -146,13 +149,13 @@ python Tools/CodexMonitor/tests/test_state_view.py
 
 ## 持续事件绑定 / Event-correlated bindings
 
-2026-10-15 起，用户级 Hook 的 `collector.py` 使用 `bound_collector.py` 包装原生命周期采集器，Hook 定义未改。原脚本另存同目录 `lifecycle_collector.py`，原件备份及收据在 `tmp/codex-monitor-probe/live-binding-probe.json`。只允许本机实测的 Codex 程序完整路径，最多 16 个当前快照会话；这些参数仅用于已批准的隔离实验。侧文件位于原状态目录的 `host-bindings.json`，不会写入提示词、工具参数或串口消息。包装器出错不改变原采集结果。
+当前桌面安装使用版本化目录中的 `omi-device.exe --collect-hook`，由 `hook_runner.py` 调用 `bound_collector.run`；配置允许的 Codex 程序路径，默认关联上限为 16 个当前快照会话。新版本安装会备份并更新自有 Hook 定义，信任由 Codex 用户完成。侧文件位于状态目录的 `host-bindings.json`，包装器在原有互斥锁内发布生命周期和证明；关联失败不阻断原采集结果。开发者的手动脚本部署仍可使用同目录 `lifecycle_collector.py` 和 `host-binding-config.json`，不要与桌面安装重复注册。
 
 同一会话、轮次及工具调用的 `PreToolUse`/`PostToolUse` 必须来自同一个经查询的父进程身份，才会标记 confirmed；之后每次事件还需与刚写入的原始时间、事件、轮次、调用 ID 以及 `applied=true` 精确对应。身份变化须重新配对，`SessionEnd` 删除该绑定。视图每次读取重新检查进程身份与最新事件证明；未覆盖的历史会话、迟到事件、损坏证据和过期事件均显示 unknown。进程存在仍不证明聊天持续运行。
 
-短时实机接入前，隔离目录内的 52 条原采集事件回归及真实 Windows 父进程测试通过；真实 Hook 形成 1 个 confirmed 绑定，随后用它完成 USB 只读复测。持续绑定只会随新 Hook 事件逐步覆盖当前会话，不能补造没有新事件的另外 6 个历史会话。设备通信及 30 秒预算结果见 [DeviceBridge](../DeviceBridge/README.md)。恢复原采集脚本可运行 `python tmp/codex-monitor-probe/live_binding_probe.py restore`；恢复会核对当前包装器及备份哈希，不修改 Hook 定义。恢复后下一次原始事件会使旧侧文件证明失效。
+历史验证（2026-10-15）：52 条合成事件与 Windows 父进程回归通过，随后真实 Hook 形成 confirmed 绑定并用于 USB 只读复测。持续关联只能随新事件覆盖当前会话，不能补造历史聊天。当前升级/卸载使用桌面向导的安装记录和备份；不要用早期本机临时探针脚本覆盖新版入口。恢复后旧侧文件证明也不能直接当成新事件。
 
-USB/Wi-Fi 共用消息协议及真实观测桥接见 [DeviceBridge](../DeviceBridge/README.md)。USB 实验固件已于 2026-10-14 授权烧录；`bridge.py` 可在前台持续读取本工具的原有快照，将临时别名和最后观测状态发送到设备，停止时尝试释放。2026-10-15 本次确认周期 1 秒、超时 2 秒、重试 1 次并运行 60 秒；未设置业务有效期，设备显示强制 unknown。SDK SOF 计数缺陷已通过隔离副本修复并烧录；复测 60 秒获 56 个真实观测 ACK，零超时/重建，link_losses 首尾均为 2、未新增，确认退出释放。长期稳定仍待验证。没有修改 Hook 或安装后台服务；真实控灯、新鲜度和 Wi-Fi 传输待实现。
+USB/Wi-Fi 共用消息协议及真实观测桥接见 [DeviceBridge](../DeviceBridge/README.md)。USB 实验固件已于 2026-10-14 授权烧录；`bridge.py` 可在前台持续读取本工具的原有快照，将临时别名和最后观测状态发送到设备，停止时尝试释放。2026-10-15 本次确认周期 1 秒、超时 2 秒、重试 1 次并运行 60 秒；未设置业务有效期，设备显示强制 unknown。SDK SOF 计数缺陷已通过隔离副本修复并烧录；复测 60 秒获 56 个真实观测 ACK，零超时/重建，link_losses 首尾均为 2、未新增，确认退出释放。长期稳定仍待验证。没有修改 Hook 或安装后台服务；该轮未验证真实控灯、新鲜度挑战和 Wi-Fi 传输；这些现已由 DeviceBridge 与桌面集成，当前边界见对应文档。
 
 ## 复核 / Verification
 
@@ -161,6 +164,8 @@ USB/Wi-Fi 共用消息协议及真实观测桥接见 [DeviceBridge](../DeviceBri
 ```powershell
 python Tools/CodexMonitor/tests/test_approvals.py
 python Tools/CodexMonitor/tests/test_audit.py
+python -m unittest discover -s Tools/CodexMonitor/tests -p test_input_requests.py
+python -m unittest discover -s Tools/CodexMonitor/tests -p test_lifecycle_reader.py
 python Tools/CodexMonitor/audit.py
 python Tools/CodexMonitor/audit.py --session <session-id> --turn <turn-id>
 ```
@@ -175,4 +180,4 @@ python Tools/CodexMonitor/audit.py --session <session-id> --turn <turn-id>
 
 2026-10-15 状态有效期候选已在 USB 桥接层加入显式参数和传输时间预留；默认仍显示 unknown。以前短时采样生成的 2 个宿主绑定本次复核均为 unknown，因此不能用于开启真实状态。用户确认 30 秒实验预算后，短时采样取得 1 个当前会话绑定并恢复原采集器；仅显式实验启用，未接灯带，详见 DeviceBridge 文档。
 
-2026-10-15 后续将 Hook 采集时间同时绑定到 Windows 单调时钟计数，侧文件增加十进制 `observedMonotonicNs`。schema 2 视图用它计算事件年龄；缺失、倒退或异常计数一律 unknown。桥接生成快照时再扣除单调时钟经过的时间，墙上时间跳变不能延长已观测状态。原 UTC 时间仍用于审计；宿主进程身份实时核对也阻止重启后的旧计数直接沿用。旧侧文件记录会因缺少单调证明降级，直到新 Hook 事件更新。用户级包装器已按哈希升级，Hook 定义和原生命周期采集器未改。
+2026-10-15 后续将 Hook 采集时间同时绑定到 Windows 单调时钟计数，侧文件增加十进制 `observedMonotonicNs`。schema 2 视图用它计算事件年龄；缺失、倒退或异常计数一律 unknown。桥接生成快照时再扣除单调时钟经过的时间，墙上时间跳变不能延长已观测状态。原 UTC 时间仍用于审计；宿主进程身份实时核对也阻止重启后的旧计数直接沿用。旧侧文件记录会因缺少单调证明降级，直到新 Hook 事件更新。当次用户级包装器按哈希升级，未更改当次 Hook 定义和原生命周期采集器；当前便携包升级使用版本化安装，定义变化需重新审查。

@@ -1,6 +1,6 @@
 # Third-party components
 
-This application uses packages from their official npm / crates.io distributions. Exact JavaScript and Rust versions are recorded in `package-lock.json` and `Cargo.lock`. Its layout follows Microsoft WinUI Gallery design concepts; no Gallery XAML or business code is incorporated.
+This application uses packages from their official npm / crates.io distributions. Exact JavaScript and Rust versions are recorded in `package-lock.json` and `src-tauri/Cargo.lock`. Its layout follows Microsoft WinUI Gallery design concepts; no Gallery XAML or business code is incorporated.
 
 | Component | Source | License |
 |---|---|---|
@@ -16,9 +16,9 @@ This application uses packages from their official npm / crates.io distributions
 | websocket-client 1.9.2 | https://github.com/websocket-client/websocket-client | Apache-2.0 |
 | Mbed TLS 2.28.7 (EC J-PAKE native helper) | https://github.com/Mbed-TLS/mbedtls/tree/v2.28.7 | Apache-2.0 OR GPL-2.0-or-later; distributed under Apache-2.0 |
 
-System fonts (Segoe UI / Microsoft YaHei UI) are referenced by name and are not bundled. Windows WebView2 is a separate Microsoft runtime. Portable packages include dependency license texts; no remote release has been published.
+System fonts (Segoe UI / Microsoft YaHei UI) are referenced by name and are not bundled. Windows WebView2 is a separate Microsoft runtime. Portable packages include dependency license texts. Building a local portable package does not publish a remote release.
 
-The Misaka Mikoto app avatar was prepared with the built-in imagegen tool using an official anime portrait as its reference: https://toaru-project.com/index_3/chara/mikoto.html. Character and reference-art rights remain with their original rightsholders; it is not included under the software dependencies' MIT licenses. Details and the preparation prompt are in `src-tauri/icons/README.md`.
+The Misaka Mikoto app avatar was prepared with the built-in imagegen tool using an official anime portrait as its reference: https://toaru-project.com/index_3/chara/mikoto.html. Character and reference-art rights remain with their original rightsholders; it is not included under the software dependencies' MIT licenses. Details and the preparation prompt are in `src-tauri/icons/README.md` in the source tree, or `APP_ICON_SOURCE.md` in a portable package.
 
 The Windows portable application directory includes `DEPENDENCY_LICENSES.txt` with the collected production npm and downloaded Rust build-source license texts. This intentionally includes build-time crates. The unchanged transitive `selectors` 0.38.0 crate uses MPL-2.0; its source is available at https://github.com/servo/stylo/tree/572ecba2d1600e7c3d490586692a209faf703baa/selectors and https://crates.io/crates/selectors/0.38.0. Additional text sources are the Mozilla MPL-2.0 text and upstream license files at the exact `alloc-stdlib` / `webview2-com` source revisions recorded by Cargo.
 
