@@ -13,7 +13,7 @@ constexpr uint8_t kPairingMaxAttempts = 5;
 
 enum class StoredIdentityState { Unknown, Absent, Present };
 
-//  启动时只给未配对设备一次配对窗口；所有安全前提就绪前不生成或显示码 / Grant one pairing window per boot only to an unpaired device; do not generate or show a code until every security prerequisite is ready
+//  显式本机请求才开放限时配对窗口；未知身份仍禁止开放 / Open a bounded pairing window only on an explicit local request; unknown identity remains blocked
 class PairingBoot {
  public:
   using RandomWord = bool (*)(uint32_t* word, void* context);
@@ -27,7 +27,7 @@ class PairingBoot {
     initialized_ = true;
     eraseCode();
     window_.close();
-    eligible_ = identity == StoredIdentityState::Absent;
+    eligible_ = identity != StoredIdentityState::Unknown;
     attemptedThisBoot_ = false;
     return true;
   }
@@ -65,6 +65,20 @@ class PairingBoot {
       eraseCode();
     }
     return state;
+  }
+
+  bool openByRequest(uint64_t nowMs, RandomWord randomWord, void* context) {
+    if (!initialized_ || !eligible_ || window_.state() == WindowState::InProgress) return false;
+    window_.close();
+    eraseCode();
+    attemptedThisBoot_ = false;
+    return tryOpen(nowMs, true, true, true, randomWord, context);
+  }
+
+  void invalidateIdentity() {
+    eligible_ = false;
+    window_.close();
+    eraseCode();
   }
 
   bool beginAttempt(uint64_t nowMs) {

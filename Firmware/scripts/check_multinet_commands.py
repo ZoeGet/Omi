@@ -22,6 +22,7 @@ EXPECTED_COMMAND_IDS = {
     "solid": 14,
     "off": 15,
     "center_expand": 16,
+    "pairing": 17,
 }
 MAX_COMMAND_PHRASE_COUNT = 200
 MAX_PHONEME_LENGTH = 63
@@ -131,6 +132,7 @@ def parse_runtime_ids(runtime_header: Path) -> dict[str, int]:
         "solid": "kSolidEffectCommandId",
         "off": "kOffEffectCommandId",
         "center_expand": "kCenterExpandEffectCommandId",
+        "pairing": "kOpenPairingModeCommandId",
     }
     for name, symbol in symbols.items():
         match = re.search(

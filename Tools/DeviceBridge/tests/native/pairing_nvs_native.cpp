@@ -102,12 +102,32 @@ int main() {
       savePairingCredentialOnce(key.data(), pin.data()) || wifiSentinel != 1234) return 1;
   std::cout << "PASS nvs_record_writes_once_and_reads_back\n";
 
+  auto newKey = key;
+  newKey[0] ^= 0x80;
+  auto wrongPin = pin;
+  wrongPin[0] ^= 0x80;
+  if (replacePairingCredential(newKey.data(), wrongPin.data(), key.data()) ||
+      replacePairingCredential(newKey.data(), pin.data(), newKey.data())) return 1;
+  setFails = true;
+  if (replacePairingCredential(newKey.data(), pin.data(), key.data())) return 1;
+  setFails = false;
+  commitFails = true;
+  if (replacePairingCredential(newKey.data(), pin.data(), key.data())) return 1;
+  commitFails = false;
+  if (loadPairingCredential(loadedKey.data(), loadedPin.data()) != CredentialLoadState::Present || loadedKey != key) return 1;
+  if (!replacePairingCredential(newKey.data(), pin.data(), key.data()) ||
+      loadPairingCredential(loadedKey.data(), loadedPin.data()) != CredentialLoadState::Present ||
+      loadedKey != newKey || loadedPin != pin || wifiSentinel != 1234 ||
+      replacePairingCredential(key.data(), pin.data(), key.data())) return 1;
+  std::cout << "PASS explicit_repair_atomically_replaces_expected_key_and_preserves_wifi\n";
+
   persisted[8] ^= 1;
   loadedKey.fill(0xff);
   loadedPin.fill(0xff);
   if (loadPairingCredential(loadedKey.data(), loadedPin.data()) !=
           CredentialLoadState::Unknown || !allZero(loadedKey) ||
-      !allZero(loadedPin) || savePairingCredentialOnce(key.data(), pin.data())) return 1;
+      !allZero(loadedPin) || savePairingCredentialOnce(key.data(), pin.data()) ||
+      replacePairingCredential(key.data(), pin.data(), newKey.data())) return 1;
   persisted.resize(12);
   if (loadPairingCredential(loadedKey.data(), loadedPin.data()) !=
           CredentialLoadState::Unknown) return 1;

@@ -42,6 +42,7 @@ SemaphoreHandle_t mutex = nullptr;
 std::atomic<bool> started{false};
 std::atomic<int> liveSocket{-1};
 std::atomic<bool> closeQueued{false};
+std::atomic<bool> pairingRequested{false};
 std::atomic<uint32_t> deadlineMs{0};
 uint8_t certificate[1024], privateKey[256], pin[32], dailyKey[32];
 mbedtls_x509_crt tlsCertificate;
@@ -213,7 +214,8 @@ esp_err_t handleMessage(httpd_req_t* req, Peer& peer, cJSON* request) {
   }
   uint8_t data[kPairingRoundBytes], other[kPairingRoundBytes], received[32], expected[32];
   size_t size = 0, otherSize = 0, proofSize = 0;
-  if (peer.phase == 1 && paired && shape(request, "challenge", 0)) {
+  boot.advance(nowMs());
+  if (peer.phase == 1 && paired && !boot.visibleCode() && shape(request, "challenge", 0)) {
     randomBytes(nullptr, peer.nonce, 32);
     if (!peer.auth.begin(true, dailyKey, pin, peer.nonce) || !encoded(reply.get(), "nonce", peer.nonce, 32)) return ESP_FAIL;
     peer.phase = 4;
@@ -226,7 +228,7 @@ esp_err_t handleMessage(httpd_req_t* req, Peer& peer, cJSON* request) {
     peer.phase = 5;
     return sendReply(req, "authenticated", reply);
   }
-  if (peer.phase == 1 && !paired && shape(request, "pair1", 1)) {
+  if (peer.phase == 1 && ((!paired && shape(request, "pair1", 1)) || shape(request, "repair1", 1))) {
     if (!boot.beginAttempt(nowMs())) return ESP_FAIL;
     peer.attempt = true;
     if (!peer.exchange.begin(true, boot.visibleCode(), randomBytes, nullptr) ||
@@ -260,21 +262,22 @@ esp_err_t handleMessage(httpd_req_t* req, Peer& peer, cJSON* request) {
     if (boot.advance(nowMs()) != WindowState::InProgress || !decode(request, "proof", received, 32, proofSize) ||
         proofSize != 32 || !pairingConfirmation(peer.key, 'C', peer.digest, pin, expected) ||
         !fixedTimeEqual(expected, received, 32)) return ESP_FAIL;
-    const bool stored = savePairingCredentialOnce(peer.key, pin);
+    const bool replacing = paired;
+    const bool stored = replacing ? replacePairingCredential(peer.key, pin, dailyKey) : savePairingCredentialOnce(peer.key, pin);
     uint8_t storedPin[32];
     const auto state = loadPairingCredential(dailyKey, storedPin);
     paired = state == CredentialLoadState::Present && fixedTimeEqual(pin, storedPin, 32);
     if (!stored || !paired || !fixedTimeEqual(dailyKey, peer.key, 32)) {
       boot.finishAttempt(false, nowMs());
       peer.attempt = false;
-      if (state != CredentialLoadState::Absent) boot.advance(UINT64_MAX);
+      if (state == CredentialLoadState::Unknown || (state == CredentialLoadState::Present && !paired)) boot.invalidateIdentity();
       return ESP_FAIL;
     }
     boot.finishAttempt(true, nowMs());
     peer.attempt = false;
     peer.phase = 5;
     if (!pairingConfirmation(peer.key, 'S', peer.digest, pin, expected) || !encoded(reply.get(), "proof", expected, 32)) return ESP_FAIL;
-    Serial.println("[PAIR] committed=1");
+    Serial.printf("[PAIR] committed=1 replaced=%u\n", replacing);
     return sendReply(req, "committed", reply);
   }
   return ESP_FAIL;
@@ -364,8 +367,6 @@ bool startService() {
   if (httpd_register_uri_handler(server, &uri) != ESP_OK) { httpd_stop(server); server = nullptr; return false; }
   Lock lock;
   boot.onBoot(stored);
-  openedAt = nowMs();
-  boot.tryOpen(openedAt, true, true, true, randomWord, nullptr);
   started = true;
   Serial.printf("[PAIR] ready=1 paired=%u ip=%s port=8443\n", paired, WiFi.localIP().toString().c_str());
   return true;
@@ -379,6 +380,15 @@ void startTask(void*) {
 }
 }  //  私有服务状态 / Private service state
 
+bool requestWirelessPairing() {
+  if (WiFi.status() != WL_CONNECTED || !started.load()) {
+    Serial.println("[PAIR] open=0 reason=offline-or-not-ready");
+    return false;
+  }
+  pairingRequested = true;
+  return true;
+}
+
 void updateWirelessPairing(bool connected) {
   static bool attempted = false;
   if (connected && !attempted) {
@@ -389,16 +399,25 @@ void updateWirelessPairing(bool connected) {
   }
   if (!started) return;
   const int fd = liveSocket.load();
-  if (fd >= 0 && (!connected || static_cast<int32_t>(static_cast<uint32_t>(nowMs()) - deadlineMs.load()) >= 0) && !closeQueued.exchange(true)) {
+  if (fd >= 0 && (!connected || pairingRequested.load() || static_cast<int32_t>(static_cast<uint32_t>(nowMs()) - deadlineMs.load()) >= 0) && !closeQueued.exchange(true)) {
     if (httpd_sess_trigger_close(server, fd) != ESP_OK) closeQueued = false;
   }
   if (xSemaphoreTake(mutex, 0) != pdTRUE) return;
+  bool openFailed = false;
+  if (!connected) pairingRequested = false;
+  if (connected && liveSocket.load() < 0 && pairingRequested.exchange(false)) {
+    openedAt = nowMs();
+    const bool opened = boot.openByRequest(openedAt, randomWord, nullptr);
+    openFailed = !opened;
+    Serial.printf("[PAIR] open=%u source=voice paired=%u ip=%s port=8443\n", opened, paired, WiFi.localIP().toString().c_str());
+  }
   boot.advance(nowMs());
   char code[7] = {};
   const char* visible = connected ? boot.visibleCode() : nullptr;
   if (visible) std::memcpy(code, visible, sizeof(code));
   const uint64_t remaining = nowMs() < openedAt + kPairingValidityMs ? openedAt + kPairingValidityMs - nowMs() : 0;
   xSemaphoreGive(mutex);
+  if (openFailed) OmiPetUi::setVoiceStatus("PAIR UNREADY");
   OmiPetUi::setPairingCode(code[0] ? code : nullptr, (remaining + 999) / 1000, WiFi.localIP().toString().c_str());
 }
 }  //  配对命名空间 / Pairing namespace

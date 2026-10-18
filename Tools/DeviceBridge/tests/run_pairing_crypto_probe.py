@@ -91,7 +91,7 @@ def main():
              "-o", native_path(tls_store_executable)])
         output += run([native_path(tls_store_executable)], timeout=120)
     checks = [line[5:] for line in output.splitlines() if line.startswith("PASS ")]
-    if len(checks) != 22:
+    if len(checks) != 23:
         raise RuntimeError("Unexpected primitive probe result")
     report = dict(result="pass", primitive="Mbed TLS 2.28.7 low-level EC J-PAKE",
                   checks=checks, noTlsEcjpakeCipherSuite=True, networkEnabled=False,

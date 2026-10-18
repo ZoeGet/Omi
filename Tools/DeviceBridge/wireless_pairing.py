@@ -147,6 +147,7 @@ class PairingStore:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.open() as db:
             db.execute("CREATE TABLE IF NOT EXISTS devices (address TEXT PRIMARY KEY, record BLOB NOT NULL, confirmed INTEGER NOT NULL)")
+            db.execute("CREATE TABLE IF NOT EXISTS repairs (address TEXT PRIMARY KEY, record BLOB NOT NULL, previous BLOB)")
 
     @contextmanager
     def open(self):
@@ -172,32 +173,76 @@ class PairingStore:
 
     def confirm(self, address, key, pin):
         with self.open() as db:
+            db.execute("BEGIN IMMEDIATE")
+            repair = db.execute("SELECT record, previous FROM repairs WHERE address=?", (endpoint(address),)).fetchone()
+            if repair and decode_record(repair[0]) == (key, pin):
+                current = db.execute("SELECT record FROM devices WHERE address=?", (endpoint(address),)).fetchone()
+                if (current[0] if current else None) != repair[1]:
+                    raise ValueError("配对凭据已发生变化")
+                for old_address, old_record in db.execute("SELECT address, record FROM devices").fetchall():
+                    try:
+                        same_device = decode_record(old_record)[1] == pin
+                    except ValueError:
+                        continue
+                    if same_device:
+                        db.execute("DELETE FROM devices WHERE address=?", (old_address,))
+                db.execute("INSERT OR REPLACE INTO devices VALUES (?, ?, 1)", (endpoint(address), repair[0]))
+                db.execute("DELETE FROM repairs WHERE address=? AND record=?", (endpoint(address), repair[0]))
+                return
             cursor = db.execute("UPDATE devices SET confirmed=1 WHERE address=? AND record=?",
                                 (endpoint(address), encode_record(key, pin)))
             if cursor.rowcount != 1:
                 raise ValueError("配对凭据已发生变化")
 
+    def stage_repair(self, address, key, pin):
+        with self.open() as db:
+            db.execute("BEGIN IMMEDIATE")
+            previous = db.execute("SELECT record FROM devices WHERE address=?", (endpoint(address),)).fetchone()
+            db.execute("INSERT OR REPLACE INTO repairs VALUES (?, ?, ?)",
+                       (endpoint(address), encode_record(key, pin), previous[0] if previous else None))
+
+    def authentication_records(self, address):
+        with self.open() as db:
+            repair = db.execute("SELECT record FROM repairs WHERE address=?", (endpoint(address),)).fetchone()
+        existing = self.load(address)
+        return ([(*decode_record(repair[0]), False)] if repair else []) + ([existing] if existing else [])
+
     def devices(self):
         with self.open() as db:
-            return [dict(address=row[0], confirmed=bool(row[1])) for row in
-                    db.execute("SELECT address, confirmed FROM devices ORDER BY address")]
+            return [dict(address=row[0], confirmed=bool(row[1]), pendingRepair=bool(row[2])) for row in
+                    db.execute("SELECT d.address, d.confirmed, r.address IS NOT NULL FROM devices d LEFT JOIN repairs r ON d.address=r.address "
+                               "UNION ALL SELECT r.address, 0, 1 FROM repairs r WHERE NOT EXISTS (SELECT 1 FROM devices d WHERE d.address=r.address) ORDER BY 1")]
+
+    def relocate(self, previous, address, record):
+        previous, address = endpoint(previous), endpoint(address)
+        key, pin, _ = record
+        with self.open() as db:
+            db.execute("BEGIN IMMEDIATE")
+            source = db.execute("SELECT record, confirmed FROM devices WHERE address=?", (previous,)).fetchone()
+            if not source or (*decode_record(source[0]), bool(source[1])) != record:
+                raise ValueError("配对凭据已发生变化")
+            target = db.execute("SELECT record FROM devices WHERE address=?", (address,)).fetchone()
+            if target and decode_record(target[0]) != (key, pin):
+                raise ValueError("新地址已有其他设备记录，拒绝覆盖")
+            db.execute("DELETE FROM devices WHERE address=?", (previous,))
+            db.execute("INSERT OR REPLACE INTO devices VALUES (?, ?, 1)", (address, source[0]))
 
 
-def pair_device(address, code, *, store=None, socket_factory=PairingSocket, pake_factory=Pake):
+def pair_device(address, code, *, store=None, socket_factory=PairingSocket, pake_factory=Pake, replace=False):
     store = store or PairingStore()
-    existing = store.load(address)
-    with socket_factory(address, existing[1] if existing else None) as wire:
-        if wire.ready["paired"]:
+    existing = None if replace else store.load(address)
+    with socket_factory(address, existing[1] if existing and not replace else None) as wire:
+        if wire.ready["paired"] and not replace:
             if not existing:
                 raise ValueError("设备已配对，本机没有对应凭据")
             wire.authenticate(existing[0])
             store.confirm(address, existing[0], existing[1])
             return
-        if existing and existing[2]:
+        if existing and existing[2] and not replace:
             raise ValueError("已配对设备的状态异常，拒绝覆盖身份")
         with pake_factory(code) as pake:
             c1 = pake.write()
-            wire.send("pair1", data=b64(c1))
+            wire.send("repair1" if replace else "pair1", data=b64(c1))
             reply = wire.receive("pair1", {"one", "two"})
             s1, s2 = unb64(reply["one"]), unb64(reply["two"])
             pake.read(s1)
@@ -210,7 +255,10 @@ def pair_device(address, code, *, store=None, socket_factory=PairingSocket, pake
         if not hmac.compare_digest(proof, confirmation(shared, "D", digest, wire.pin)):
             raise ValueError("配对码或设备身份验证失败")
         key = derive_daily_key(shared, digest, wire.pin)
-        store.prepare(address, key, wire.pin)
+        if replace:
+            store.stage_repair(address, key, wire.pin)
+        else:
+            store.prepare(address, key, wire.pin)
         wire.send("commit", proof=b64(confirmation(key, "C", digest, wire.pin)))
         proof = unb64(wire.receive("committed", {"proof"})["proof"], 32)
         if not hmac.compare_digest(proof, confirmation(key, "S", digest, wire.pin)):
@@ -220,9 +268,28 @@ def pair_device(address, code, *, store=None, socket_factory=PairingSocket, pake
 
 def verify_device(address, *, store=None, socket_factory=PairingSocket):
     store = store or PairingStore()
-    existing = store.load(address)
-    if not existing:
+    records = store.authentication_records(address)
+    if not records:
         raise ValueError("请先输入屏幕上的六位码配对")
-    with socket_factory(address, existing[1]) as wire:
-        wire.authenticate(existing[0])
-    store.confirm(address, existing[0], existing[1])
+    for existing in records:
+        try:
+            with socket_factory(address, existing[1]) as wire:
+                wire.authenticate(existing[0])
+        except (OSError, ValueError, websocket.WebSocketException):
+            continue
+        store.confirm(address, existing[0], existing[1])
+        return
+    raise ValueError("设备认证失败；重配确认不完整时请重试验证或使用屏幕新码重配")
+
+
+def relocate_device(previous, address, *, store=None, socket_factory=PairingSocket, stop=None):
+    store = store or PairingStore()
+    record = store.load(previous)
+    if not record:
+        raise ValueError("找不到原配对凭据")
+    with socket_factory(address, record[1]) as wire:
+        wire.authenticate(record[0])
+    if stop is not None and stop.is_set():
+        raise ConnectionError("cancelled")
+    store.relocate(previous, address, record)
+    return endpoint(address)

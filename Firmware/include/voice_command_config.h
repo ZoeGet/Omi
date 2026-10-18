@@ -57,6 +57,7 @@ constexpr VoiceCommandPhrase kVoiceCommandPhrases[] = {
     {15, "guan bi deng guang"},  //  关闭灯光 / Turn off the lighting
     {16, "kuo san deng"},  //  扩散灯 / Expanding lights
     {16, "kuo san deng guang"},  //  扩散灯光 / Expanding light effect
+    {17, "kai qi pei dui mo shi"},  //  开启配对模式 / Open pairing mode
 };
 
 constexpr size_t kVoiceCommandPhraseCount =

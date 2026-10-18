@@ -76,4 +76,31 @@ bool savePairingCredentialOnce(const uint8_t* dailyKey,
   return stored;
 }
 
+bool replacePairingCredential(const uint8_t* dailyKey, const uint8_t* certPin,
+                              const uint8_t* expectedKey) {
+  if (expectedKey == nullptr) return false;
+  uint8_t oldKey[kPairingKeyBytes] = {}, oldPin[kPairingCertPinBytes] = {};
+  const bool matches = loadPairingCredential(oldKey, oldPin) == CredentialLoadState::Present &&
+      fixedTimeEqual(oldKey, expectedKey, sizeof(oldKey)) &&
+      certPin != nullptr && fixedTimeEqual(oldPin, certPin, sizeof(oldPin));
+  mbedtls_platform_zeroize(oldKey, sizeof(oldKey));
+  mbedtls_platform_zeroize(oldPin, sizeof(oldPin));
+  if (!matches) return false;
+  uint8_t record[kCredentialRecordBytes] = {}, confirmed[kCredentialRecordBytes] = {};
+  if (!encodeCredentialRecord(dailyKey, certPin, record)) return false;
+  nvs_handle_t handle = 0;
+  bool stored = false;
+  if (nvs_open(kNamespace, NVS_READWRITE, &handle) == ESP_OK) {
+    if (nvs_set_blob(handle, kRecordKey, record, sizeof(record)) == ESP_OK && nvs_commit(handle) == ESP_OK) {
+      size_t length = sizeof(confirmed);
+      stored = nvs_get_blob(handle, kRecordKey, confirmed, &length) == ESP_OK &&
+          length == sizeof(confirmed) && fixedTimeEqual(record, confirmed, sizeof(record));
+    }
+    nvs_close(handle);
+  }
+  mbedtls_platform_zeroize(record, sizeof(record));
+  mbedtls_platform_zeroize(confirmed, sizeof(confirmed));
+  return stored;
+}
+
 }  //  配对命名空间 / Pairing namespace

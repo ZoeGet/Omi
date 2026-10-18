@@ -16,4 +16,8 @@ CredentialLoadState loadPairingCredential(uint8_t* dailyKey,
 bool savePairingCredentialOnce(const uint8_t* dailyKey,
                                const uint8_t* certPin);
 
+//  仅在新配对证明通过后替换预期旧密钥，保留证书和其他 NVS / Replace the expected old key only after new pairing proof; preserve the certificate and other NVS
+bool replacePairingCredential(const uint8_t* dailyKey, const uint8_t* certPin,
+                              const uint8_t* expectedKey);
+
 }  //  配对命名空间 / Pairing namespace

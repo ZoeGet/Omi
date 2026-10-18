@@ -86,15 +86,16 @@ int main() {
   RandomSequence random{{123456U}, 1, 0};
   assert(pairedBoot.onBoot(StoredIdentityState::Present));
   assert(!pairedBoot.onBoot(StoredIdentityState::Absent));
-  assert(!pairedBoot.tryOpen(0, true, true, true, nextRandomWord, &random));
-  assert(random.position == 0);
-  assert(pairedBoot.visibleCode() == nullptr);
+  assert(pairedBoot.tryOpen(0, true, true, true, nextRandomWord, &random));
+  assert(random.position == 1);
+  assert(std::string(pairedBoot.visibleCode()) == "123456");
   OmiPetPairing::PairingBoot unreadableIdentity;
   assert(unreadableIdentity.onBoot(StoredIdentityState::Unknown));
   assert(!unreadableIdentity.tryOpen(0, true, true, true, nextRandomWord, &random));
-  std::cout << "PASS paired_or_unreadable_identity_never_opens_pairing\n";
+  std::cout << "PASS paired_identity_can_repair_but_unreadable_identity_stays_blocked\n";
 
   OmiPetPairing::PairingBoot boot;
+  random = RandomSequence{{123456U}, 1, 0};
   assert(!boot.tryOpen(0, true, true, true, nextRandomWord, &random));
   assert(boot.onBoot(StoredIdentityState::Absent));
   assert(!boot.tryOpen(0, false, true, true, nextRandomWord, &random));
@@ -137,6 +138,39 @@ int main() {
   assert(rebooted.visibleCode() == nullptr);
   OmiPetPairing::PairingBoot afterPairing;
   assert(afterPairing.onBoot(StoredIdentityState::Present));
-  assert(!afterPairing.tryOpen(0, true, true, true, nextRandomWord, &random));
-  std::cout << "PASS lock_requires_reboot_and_success_disables_future_boot\n";
+  random = RandomSequence{{654321U}, 1, 0};
+  assert(afterPairing.tryOpen(0, true, true, true, nextRandomWord, &random));
+  assert(std::string(afterPairing.visibleCode()) == "654321");
+  assert(!afterPairing.tryOpen(1, true, true, true, nextRandomWord, &random));
+  std::cout << "PASS lock_requires_reboot_and_paired_reboot_opens_new_window\n";
+
+  OmiPetPairing::PairingBoot requested;
+  assert(requested.onBoot(StoredIdentityState::Present));
+  assert(requested.state() == WindowState::Closed && requested.visibleCode() == nullptr);
+  random = RandomSequence{{123456U}, 1, 0};
+  assert(requested.openByRequest(1000, nextRandomWord, &random));
+  assert(requested.beginAttempt(1001));
+  assert(!requested.openByRequest(1002, nextRandomWord, &random));
+  assert(!requested.finishAttempt(false, 1003));
+  assert(requested.advance(301000) == WindowState::Expired);
+  random = RandomSequence{{654321U}, 1, 0};
+  assert(requested.openByRequest(302000, nextRandomWord, &random));
+  assert(std::string(requested.visibleCode()) == "654321");
+  for (int attempt = 0; attempt < 5; ++attempt) {
+    assert(requested.beginAttempt(302001 + attempt * 2));
+    assert(!requested.finishAttempt(false, 302002 + attempt * 2));
+  }
+  assert(requested.state() == WindowState::Locked);
+  random = RandomSequence{{111111U}, 1, 0};
+  assert(requested.openByRequest(303000, nextRandomWord, &random));
+  assert(requested.attempts() == 0 && std::string(requested.visibleCode()) == "111111");
+  random = RandomSequence{{}, 0, 0};
+  assert(!requested.openByRequest(304000, nextRandomWord, &random));
+  assert(requested.visibleCode() == nullptr && requested.state() == WindowState::Closed);
+  requested.invalidateIdentity();
+  random = RandomSequence{{222222U}, 1, 0};
+  assert(!requested.openByRequest(305000, nextRandomWord, &random));
+  assert(random.position == 0 && requested.visibleCode() == nullptr);
+  assert(!unreadableIdentity.openByRequest(0, nextRandomWord, &random));
+  std::cout << "PASS explicit_local_request_opens_fresh_code_without_reboot_and_random_failure_closes\n";
 }

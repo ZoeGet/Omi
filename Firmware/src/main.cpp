@@ -424,6 +424,21 @@ void updateCommandAudioFrames() {
       }
       continue;
     }
+    //  配对只由唤醒后的本机语音命令开放，不通过网络重置身份 / Open pairing only from a post-wake local voice command; never reset identity over the network
+    if (OmiPetVoice::voice.listeningForCommand() && commandId == OmiPetAudio::kOpenPairingModeCommandId) {
+      bool requested = false;
+#if OMIPET_WIFI_PAIRING
+      requested = OmiPetPairing::requestWirelessPairing();
+#else
+      Serial.println("[PAIR] open=0 reason=feature-disabled");
+#endif
+      finishWakeLight();
+      OmiPetAudio::multiNetCommandRecognizer.reset();
+      gCommandAudioBuffer.reset();
+      OmiPetVoice::voice.notifyCommandCompleted();
+      if (!requested) OmiPetUi::setVoiceStatus("PAIR UNREADY");
+      continue;
+    }
     //  唤醒后接受灯带控制命令，执行成功后回到持续监听 / Accept LED commands after wake-up, then return to continuous listening
     if (OmiPetVoice::voice.listeningForCommand() &&
         commandId >= OmiPetAudio::kIncreaseBrightnessCommandId &&

@@ -19,7 +19,13 @@ class CommandGenerationTests(unittest.TestCase):
         self.runtime = self.root / "runtime.h"
         original = Path(__file__).resolve().parents[2] / "include/multinet_command_recognizer.h"
         self.runtime.write_text(original.read_text(encoding="utf-8"), encoding="utf-8")
-        self.commands = [(number, "ce shi " + chr(96 + number)) for number in range(1, 17)]
+        self.commands = [(number, "ce shi " + chr(96 + number)) for number in range(1, 18)]
+
+    def test_personal_pairing_phrase_is_in_generated_runtime_and_model_words(self):
+        source = Path(__file__).resolve().parents[2] / "include/voice_command_config.h"
+        check_and_generate(source, self.words, self.runtime, self.generated)
+        self.assertIn("17 kai qi pei dui mo shi\n", self.words.read_text(encoding="utf-8"))
+        self.assertIn('{17, "kai qi pei dui mo shi"}', self.generated.read_text(encoding="utf-8"))
 
     def generate(self, commands):
         entries = ",\n".join(f'{{{number}, "{phrase}"}}' for number, phrase in commands)

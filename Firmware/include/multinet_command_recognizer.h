@@ -24,6 +24,7 @@ constexpr int kSweepEffectCommandId = 13;  //  左右扫描动效命令 ID / Lef
 constexpr int kSolidEffectCommandId = 14;  //  常亮动效命令 ID / Solid effect command ID
 constexpr int kOffEffectCommandId = 15;  //  关闭灯带命令 ID / Turn-off command ID
 constexpr int kCenterExpandEffectCommandId = 16;  //  中心扩散动效命令 ID / Center-expand effect command ID
+constexpr int kOpenPairingModeCommandId = 17;  //  开启配对模式命令 ID / Open-pairing-mode command ID
 
 class MultiNetCommandRecognizer {
  public:
