@@ -125,7 +125,7 @@ export function useDevice() {
       const info = reply.result as { demo: boolean; root: string; bindings: string; ports: Port[] };
       setState(value => ({ ...value, ready: true, demo: info.demo, ports: info.ports,
         settings: { root: info.root, bindings: info.bindings, port: info.ports.length === 1 ? info.ports[0].device : '' },
-        notice: info.demo ? '演示模式：仅操作模拟设备。' : '请选择 USB 串口并连接设备。' }));
+        notice: info.demo ? '演示模式：仅操作模拟设备。' : '请选择 USB 串口或已配对的 Wi-Fi 设备进行连接。' }));
       void poll();
     }).catch(error => { if (!disposed) report(String(error)); });
     return () => { disposed = true; clearTimeout(timer); };

@@ -85,8 +85,8 @@ describe('USB desktop', () => {
     expect(bridge.invoke.mock.calls.some(([, args]) => args.message.action === 'connect-wireless'
       && args.message.body.port === 'wss://192.0.2.1:8443/pair')).toBe(true);
     bridge.events.push({ kind: 'connected', port: 'wss://192.0.2.1:8443/pair', transport: 'wifi' }, status());
-    await waitFor(() => expect(screen.getAllByText('Wi-Fi').length).toBeGreaterThan(0));
-    expect((screen.getByRole('switch', { name: '本地灯光' }) as HTMLInputElement).disabled).toBe(false);
+    await waitFor(() => expect((screen.getByRole('switch', { name: '本地灯光' }) as HTMLInputElement).disabled).toBe(false));
+    expect(screen.getByText('可信无线连接')).toBeTruthy();
   });
   it('clears the pairing code on submit and waits for the backend result', async () => {
     const user = userEvent.setup();

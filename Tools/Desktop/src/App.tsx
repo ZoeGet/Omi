@@ -50,7 +50,7 @@ export function Desktop({ device, appearance: { dark, theme, preference, setPref
       <SidebarResize width={sidebarWidth} change={setSidebarWidth} />
       <div className="workspace">
         <header className="topbar"><span>Omi <span className="breadcrumb">/ {heading.title}</span></span><div className="header-status">
-          <Badge appearance="tint" color="informative">{device.demo ? '演示模式' : device.connected && device.transport === 'wifi' ? 'Wi-Fi' : 'USB'}</Badge>
+          <Badge appearance="tint" color="informative">{device.demo ? '演示模式' : !device.connected ? 'USB / Wi-Fi' : device.transport === 'wifi' ? 'Wi-Fi' : 'USB'}</Badge>
           <span><i className={device.connected ? 'connection-dot online' : 'connection-dot'} />{device.busy ? '处理中…' : device.connected ? '已连接' : '未连接'}</span>
         </div></header>
         <main key={page} id="page-content"><div className="page-heading"><div><h1>{heading.title}</h1><p>{heading.caption}</p></div>
