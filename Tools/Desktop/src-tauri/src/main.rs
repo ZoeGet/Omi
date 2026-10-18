@@ -105,7 +105,7 @@ fn main() {
                     return;
                 }
                 let window = window.clone();
-                let _ = window.set_title("OmiPet · 正在释放设备连接…");
+                let _ = window.set_title("Omi · 正在释放设备连接…");
                 std::thread::spawn(move || {
                     backend.close();
                     let _ = window.destroy();

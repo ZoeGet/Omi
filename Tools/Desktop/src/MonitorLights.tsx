@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Button, MenuItem, Paper, Select, Slider, Typography } from '@mui/material';
+import { Button, Slider } from '@fluentui/react-components';
+import { ArrowSync20Regular, Save20Regular, ChevronRight16Regular } from '@fluentui/react-icons';
 import type { Light, MonitorProfile } from './backend';
+import { Card, ColorField, EffectPicker, LightStrip, SettingRow, effectLabels } from './Surface';
 
 export const monitorStates = [
   ['working', '运行中', '任务正在执行'],
@@ -9,7 +11,6 @@ export const monitorStates = [
   ['unknown', '来源异常 / 无事件', '来源不可读、绑定失效、状态过期或没有有效事件'],
   ['offline', '会话离线', '状态来源报告离线；与设备连接断开不同'],
 ] as const;
-export const effectLabels: Record<string, string> = { solid: '常亮', rainbow: '彩虹', breathe: '呼吸灯', sweep: '跑马灯', centerExpand: '扩散灯', off: '关闭灯光' };
 export const lightColor = (light: Light) => `#${[light.red, light.green, light.blue].map(value => value.toString(16).padStart(2, '0')).join('').toUpperCase()}`;
 export const lightDescription = (light: Light) => `${effectLabels[light.effect]} · ${lightColor(light)} · 亮度 ${Math.round(light.brightness / 255 * 100)}%`;
 
@@ -18,6 +19,7 @@ export function MonitorLights({ profile, enabled, connected, supported, demo, sa
   save: (profile: MonitorProfile) => void; read: () => void;
 }) {
   const [draft, setDraft] = useState<MonitorProfile | null>(null);
+  const [selected, setSelected] = useState('working');
   const previous = useRef('null');
   const serialized = JSON.stringify(profile ?? null);
   useEffect(() => {
@@ -29,42 +31,33 @@ export function MonitorLights({ profile, enabled, connected, supported, demo, sa
   }, [serialized]);
   const dirty = Boolean(draft && JSON.stringify(draft) !== serialized);
   const conflict = Boolean(draft && profile && draft.revision !== profile.revision);
-  function update(status: string, patch: Partial<Light>) {
+  const editable = enabled && supported && !conflict;
+  const [status, title, description] = monitorStates.find(item => item[0] === selected)!;
+  const light = draft?.profiles[status];
+  function update(patch: Partial<Light>) {
     setDraft(value => value ? { ...value, profiles: { ...value.profiles, [status]: { ...value.profiles[status], ...patch } } } : value);
   }
-  return <div className="detail-stack">
-    <Paper className="card">
-      <Typography component="h2" variant="subtitle1">Codex 监控灯效</Typography>
-      <Typography variant="body2" color="textSecondary">每种状态独立设置，点击保存后写入设备；重启后进入监控仍使用保存的灯效。断联或租约到期始终关灯，语音优先。</Typography>
-      <Typography variant="body2" color="textSecondary">多个会话按等待操作 → 运行中 → 来源异常 → 完成/空闲 → 离线的顺序汇总。无事件与来源异常使用同一项。</Typography>
-      {!connected ? <p>请先连接设备。</p> : !supported ? <p>当前固件不支持保存监控灯效，请升级固件。</p> : !profile ? <p>等待设备配置读回…</p> : <p>设备配置版本：{profile.revision}{dirty ? ' · 有未保存修改' : ' · 已读取'}</p>}
-      {demo && <p>演示模式仅保存在模拟设备内，不代表断电持久化。</p>}
-      {conflict && <p role="alert">设备配置已改变。请重新读取设备配置，再修改并保存。</p>}
-    </Paper>
-    {draft && monitorStates.map(([status, title, description]) => {
-      const light = draft.profiles[status];
-      const editable = enabled && supported && !conflict;
-      return <Paper component="section" className="card" key={status}>
-        <Typography component="h2" variant="subtitle1">{title}</Typography>
-        <Typography variant="body2" color="textSecondary">{description}</Typography>
-        <div className="monitor-profile-fields">
-          <label>颜色 <input aria-label={`${title}颜色`} type="color" value={lightColor(light)} disabled={!editable}
-            onChange={event => { const rgb = event.target.value.slice(1).match(/../g)!.map(value => parseInt(value, 16)); update(status, { red: rgb[0], green: rgb[1], blue: rgb[2] }); }} /></label>
-          <Select size="small" value={light.effect} disabled={!editable} inputProps={{ 'aria-label': `${title}灯效` }}
-            onChange={event => update(status, { effect: event.target.value })}>
-            {Object.entries(effectLabels).map(([value, label]) => <MenuItem value={value} key={value}>{label}</MenuItem>)}
-          </Select>
-          <div><Typography variant="body2">亮度 {light.brightness}/255 · {Math.round(light.brightness / 255 * 100)}%</Typography>
-            <Slider aria-label={`${title}亮度`} value={light.brightness} min={0} max={255} step={1} disabled={!editable}
-              onChange={(_, value) => update(status, { brightness: value as number })} /></div>
-        </div>
-        <Typography variant="body2" color="textSecondary">{lightDescription(light)}{light.effect === 'rainbow' ? ' · 彩虹使用独立色谱' : ''}</Typography>
-      </Paper>;
-    })}
-    <Paper className="card"><div className="button-row">
-      <Button variant="outlined" disabled={!enabled || !profile} onClick={() => { setDraft(JSON.parse(serialized)); read(); }}>重新读取设备配置</Button>
-      <Button variant="contained" disabled={!enabled || !supported || !draft || !dirty || conflict}
-        onClick={() => { if (draft) save(draft); }}>保存监控灯效到设备</Button>
-    </div><Typography variant="body2" color="textSecondary">一次保存全部状态。监控开启时可修改，收到设备保存确认才算成功。修改不会自动开启监控。</Typography></Paper>
+  return <div className="monitor-page">
+    <div className="monitor-summary"><div><strong>{!connected ? '请先连接设备。' : !supported ? '当前固件不支持保存监控灯效，请升级固件。' : !profile ? '等待设备配置读回…' : `设备配置版本：${profile.revision}`}</strong>
+      <p>断联或租约到期始终关灯，语音优先。</p></div><span className={`save-state ${dirty ? 'dirty' : ''}`}>{dirty ? '有未保存修改' : profile ? '已读取设备配置' : '等待设备'}</span></div>
+    {demo && <p className="module-note">演示模式仅保存在模拟设备内，不代表断电持久化。</p>}
+    {conflict && <p role="alert" className="conflict-notice">设备配置已改变。请重新读取设备配置，再修改并保存。</p>}
+    {draft && light ? <div className="monitor-layout"><section className="profile-list" aria-label="选择监控状态"><h2>状态规则</h2>
+      {monitorStates.map(([key, label]) => <Button key={key} appearance="subtle" className={`profile-choice ${selected === key ? 'selected' : ''}`}
+        aria-pressed={selected === key} aria-label={`编辑${label}`} onClick={() => setSelected(key)}>
+        <span className="profile-dot" style={{ backgroundColor: lightColor(draft.profiles[key]) }} /><span><strong>{label}</strong><small>{effectLabels[draft.profiles[key].effect]} · {draft.profiles[key].brightness}/255</small></span><ChevronRight16Regular /></Button>)}
+      <p className="module-note">多会话优先级：等待 → 运行 → 异常 → 完成 → 离线。</p>
+    </section><Card title={title} caption={description} className="profile-editor">
+      <SettingRow title="颜色"><ColorField label={`${title}颜色`} value={lightColor(light)} disabled={!editable} onChange={color => {
+        const rgb = color.slice(1).match(/../g)!.map(value => parseInt(value, 16)); update({ red: rgb[0], green: rgb[1], blue: rgb[2] });
+      }} /></SettingRow>
+      <SettingRow title="亮度" description={`${light.brightness}/255 · ${Math.round(light.brightness / 255 * 100)}%`}><Slider aria-label={`${title}亮度`} min={0} max={255} value={light.brightness} disabled={!editable} onChange={(_, data) => update({ brightness: data.value })} /></SettingRow>
+      <SettingRow title="灯效"><EffectPicker value={light.effect} disabled={!editable} onChange={effect => update({ effect })} /></SettingRow>
+      <LightStrip color={lightColor(light)} off={light.effect === 'off' || light.brightness === 0} /><p className="module-note">编辑预览，不代表设备当前输出。{light.effect === 'rainbow' ? '彩虹使用独立色谱。' : ''}</p>
+    </Card></div> : <div className="empty-state monitor-empty"><h2>{connected ? '等待监控灯效配置' : '连接设备后设置灯效'}</h2><p>五种状态可独立编辑，保存后重启仍保留。</p></div>}
+    <section className="apply-row"><div><strong>{dirty ? '保存全部五种状态' : '配置保存在设备中'}</strong><p>收到设备保存确认后生效。保存不会自动开启监控。</p></div><div className="button-row">
+      <Button icon={<ArrowSync20Regular />} disabled={!enabled || !profile} onClick={() => { setDraft(JSON.parse(serialized)); read(); }}>重新读取设备配置</Button>
+      <Button appearance="primary" icon={<Save20Regular />} disabled={!enabled || !supported || !draft || !dirty || conflict} onClick={() => { if (draft) save(draft); }}>保存监控灯效到设备</Button>
+    </div></section>
   </div>;
 }

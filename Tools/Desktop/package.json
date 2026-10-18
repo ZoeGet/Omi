@@ -14,10 +14,8 @@
     "desktop:build": "powershell -NoProfile -ExecutionPolicy Bypass -File ./build_windows.ps1"
   },
   "dependencies": {
-    "@emotion/react": "11.14.0",
-    "@emotion/styled": "11.14.1",
-    "@mui/icons-material": "9.5.0",
-    "@mui/material": "9.5.0",
+    "@fluentui/react-components": "9.74.9",
+    "@fluentui/react-icons": "2.0.344",
     "@tauri-apps/api": "2.12.4",
     "@tauri-apps/plugin-dialog": "2.8.3",
     "react": "19.3.1",

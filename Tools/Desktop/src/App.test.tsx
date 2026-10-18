@@ -42,7 +42,7 @@ describe('USB desktop', () => {
     expect(bridge.invoke.mock.calls.some(([, args]) => args.message.action === 'connect-wireless'
       && args.message.body.port === 'wss://192.0.2.1:8443/pair')).toBe(true);
     bridge.events.push({ kind: 'connected', port: 'wss://192.0.2.1:8443/pair', transport: 'wifi' }, status());
-    await waitFor(() => expect(screen.getByText('Wi-Fi')).toBeTruthy());
+    await waitFor(() => expect(screen.getAllByText('Wi-Fi').length).toBeGreaterThan(0));
     expect((screen.getByRole('switch', { name: '本地灯光' }) as HTMLInputElement).disabled).toBe(false);
   });
   it('clears the pairing code on submit and waits for the backend result', async () => {
@@ -128,11 +128,15 @@ describe('USB desktop', () => {
     render(<App />);
     const user = await connect(status({ operations: ['light', 'monitorProfile'], monitorProfile: profile }));
     await user.click(screen.getByRole('button', { name: '监控灯效' }));
-    await screen.findByText('运行中');
-    expect(screen.getAllByRole('slider')).toHaveLength(5);
+    await screen.findByRole('heading', { name: '运行中' });
+    expect(screen.getAllByRole('slider')).toHaveLength(1);
     const button = screen.getByRole('button', { name: '保存监控灯效到设备' }) as HTMLButtonElement;
     expect(button.disabled).toBe(true);
-    for (const slider of screen.getAllByRole('slider')) fireEvent.change(slider, { target: { value: 0 } });
+    for (const title of ['运行中', '等待操作', '完成 / 空闲', '来源异常 / 无事件', '会话离线']) {
+      await user.click(screen.getByRole('button', { name: `编辑${title}` }));
+      fireEvent.change(screen.getByRole('slider', { name: `${title}亮度` }), { target: { value: 0 } });
+    }
+    await user.click(screen.getByRole('button', { name: '编辑运行中' }));
     fireEvent.change(screen.getByLabelText('运行中颜色'), { target: { value: '#FF00FF' } });
     expect(bridge.invoke.mock.calls.some(([, args]) => args.message.action === 'monitor-profile')).toBe(false);
     await user.click(button);
