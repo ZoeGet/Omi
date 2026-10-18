@@ -8,7 +8,7 @@
 
 已确认参数：WSS `8443`、最多 1 个无线客户端、TLS/配对步骤 10 秒、日常 I/O 2 秒、4096 字节完整文本帧、每轮密码交换最多 1024 字节。TLS DER 证书/私钥缓冲分别 1024/256 字节，证书日期固定为 2026-01-01 至 2050-01-01；配对后以完整证书 SHA-256 指纹验证身份。服务沿用 ESP-IDF 默认优先级，栈 10 KB。
 
-`Firmware/src/wireless_pairing.cpp` 使用 ESP-IDF HTTP/WebSocket 服务和 Mbed TLS TLS 1.2 传输回调，绝对截止时间限制握手；主循环不运行密码交换，只更新屏幕和连接截止时间。仅设备联网后启动一次，屏幕显示六位码、倒计时和 IPv4 地址；失联时关闭连接并隐藏码，期限不重新开始。首次请求沿用 `pair1`；主动重配使用 `repair1`，同样必须通过完整 PAKE 证明。只有新码证明和提交证明均通过，才可替换已知有效的旧密钥，保留 TLS 证书、Wi-Fi、监控配置及其他 NVS。损坏/未知身份仍拒绝开放，不自动擦除或恢复出厂。
+`Firmware/src/wireless_pairing.cpp` 使用 ESP-IDF HTTP/WebSocket 服务和 Mbed TLS TLS 1.2 传输回调，绝对截止时间限制握手；主循环不运行密码交换，只更新屏幕和连接截止时间。服务仅在设备联网后启动一次；显示六位码、倒计时和 IPv4 地址还需本机语音开窗。失联时关闭连接并隐藏码，不自动生成新窗口或重置原期限。首次请求沿用 `pair1`；主动重配使用 `repair1`，同样必须通过完整 PAKE 证明。只有新码证明和提交证明均通过，才可替换已知有效的旧密钥，保留 TLS 证书、Wi-Fi、监控配置及其他 NVS。损坏/未知身份仍拒绝开放，不自动擦除或恢复出厂。
 
 `pairing_exchange.h` 是 Windows 和 ESP32 共用的有序 EC J-PAKE 实现；Windows 通过 `native/pake.cpp` 的小型 DLL 调用本机 SDK 内 Mbed TLS 2.28.7，未修改上游源文件。密码证明绑定四轮消息、角色和本次 TLS 证书指纹；六位码不直接发送到网络，也不使用六位码的普通哈希替代 PAKE。TLS 首次连接的证书只有在 PAKE 确认后才可信，失败不能进入日常认证。
 
@@ -37,9 +37,9 @@ python Tools/DeviceBridge/tests/run_pairing_crypto_probe.py --mbedtls-dir <本�
 
 原生构建需要 CMake、Ninja 和 Microsoft C++ Build Tools，默认读取 PlatformIO 安装的 Mbed TLS 2.28.7 源；可通过 `--source` 指定同版本来源。源码版本、许可证随便携包记录，不把 DLL/构建目录加入 Git。真实配对码、私钥、凭据、备份和设备日志只留本地。
 
-隔离固件由 `tests/create_experiment_config.py --wireless-pairing` 生成，其他 USB 参数按已批准值显式传入。配置、SDK defaults 与 sdkconfig 放在输出配置旁，必须在可丢弃的 `.pio` 构建目录外；避免 PlatformIO 首次清理缓存时清掉实验配置。生成不自动构建或烧录。已有 20 ms USB 过滤、语音和灯光逻辑沿用，不改变 GPIO、词表、模型或 eFuse。
+仅配对隔离固件由 `tests/create_experiment_config.py --wireless-pairing` 生成；完整无线控制还须同时传 `--wireless-control` 和已有 USB 桌面/监控参数（见 [构建示例](README.md#构建与验证)），其他 USB 参数按已批准值显式传入。配置、SDK defaults 与 sdkconfig 放在输出配置旁，必须在可丢弃的 `.pio` 构建目录外；避免 PlatformIO 首次清理缓存时清掉实验配置。生成不自动构建或烧录。保留 20 ms USB 过滤、GPIO、语音门控与灯光调度，不设置 eFuse。语音配对需要当前 `voice_command_config.h` 的 ID 17 及配套 47 词模型，不能沿用升级前词表/镜像。
 
-实机验收：设备接 USB 且独立供电 → 备份当前完整 Flash 并校验摘要 → 烧录隔离应用及原 5 MiB 模型 → 检查 `[PAIR] ready=1 paired=0 ip=… port=8443`、`mic`、`queued/dropped`、`task_wdt` → 用户在上位机输入屏幕地址/码 → 检查 `[PAIR] committed=1` 和成功回执 → 断开/重启后“验证连接”，确认不重新显示码。
+实机验收：独立供电且 USB 串口可用 → 备份完整 Flash 并校验 → 按已授权流程升级应用及当前词表生成的 5 MiB 模型，保留 NVS → 检查 `[PAIR] ready=1 paired=…`、音频队列及 WDT/panic → 唤醒后说“开启配对模式” → 核对 `[PAIR] open=1 source=voice` 和屏幕新码/IP → 软件首次配对或明确勾选重配 → 核对 `[PAIR] committed=1 replaced=…` 与成功回执 → 重启后认证与无线调灯。普通重启不显示码；原有绑定应在重配提交前保留。首次配对与日常重配本身不要求 USB；这里的 USB 用于备份、升级和日志验收。
 
 2026-10-16 实测：COM17 完整 16 MiB 备份逐块及整体 MD5 校验通过；隔离固件五个写入镜像校验通过。用户确认首次配对成功，重启后不再显示码且上位机验证成功；设备日志由 `paired=0`、`committed=1` 变为重启后的 `paired=1`。错误证书在应用消息发送前拒绝，错误日常密钥被设备关闭连接，随后正确凭据仍可认证；不发送 TLS 握手的连接在 10.01 秒被关闭，之后服务恢复。首次配对期间 101 条音频记录的 queued/dropped 均为 0，无看门狗/崩溃日志。100 项桥接、17 项桌面、7 项前端测试及隔离/默认固件构建通过；新版便携包已更新。
 

@@ -114,7 +114,7 @@ int main() {
   assert(boot.visibleCode() == nullptr);
   assert(!boot.onBoot(StoredIdentityState::Absent));
   assert(!boot.tryOpen(301001, true, true, true, nextRandomWord, &random));
-  std::cout << "PASS unpaired_reboot_opens_once_and_expiry_hides_code\n";
+  std::cout << "PASS explicit_low_level_open_once_and_expiry_hides_code\n";
 
   OmiPetPairing::PairingBoot lockedBoot;
   assert(lockedBoot.onBoot(StoredIdentityState::Absent));
@@ -142,7 +142,7 @@ int main() {
   assert(afterPairing.tryOpen(0, true, true, true, nextRandomWord, &random));
   assert(std::string(afterPairing.visibleCode()) == "654321");
   assert(!afterPairing.tryOpen(1, true, true, true, nextRandomWord, &random));
-  std::cout << "PASS lock_requires_reboot_and_paired_reboot_opens_new_window\n";
+  std::cout << "PASS fresh_instance_initializes_closed_and_explicit_open_allows_paired_identity\n";
 
   OmiPetPairing::PairingBoot requested;
   assert(requested.onBoot(StoredIdentityState::Present));

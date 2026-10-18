@@ -8,7 +8,7 @@
 #if OMIPET_PROTOCOL_EXPERIMENT
 namespace OmiPetProtocol {
 
-//  有界处理串口输入，仅完整帧诊断和帧外调试回调 / Process serial input within a budget, diagnosing frames and forwarding only external debug input
+//  有界处理完整串口协议帧，非协议输入交给调试回调 / Process complete serial protocol frames within a budget; route nonprotocol input to the debug callback
 void pollSerialExperiment(void (*debugWake)(), bool localLightAllowed = true, const char* reason = "voice-active");
 
 #if OMIPET_PROTOCOL_USB

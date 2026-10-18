@@ -97,7 +97,8 @@ def main():
                   checks=checks, noTlsEcjpakeCipherSuite=True, networkEnabled=False,
                   activeFirmwareChanged=False, isolatedFirmwareCodeAdded=True,
                   firmwareFlashed=False,
-                  pending="TLS runtime integration, credential issuance, full firmware build and device validation")
+                  scope="primitive-and-NVS-harness-only",
+                  pending="Device fault injection and long-term validation are outside this harness")
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(output, end="")

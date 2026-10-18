@@ -24,7 +24,7 @@
 #ifndef OMIPET_MONITOR_LIGHTS
 #define OMIPET_MONITOR_LIGHTS 0
 #endif
-//  新监控规则独立启用：来源未知为绿，监控断联为关灯 / Independently enable green for unknown sources and off for monitor disconnection
+//  独立启用监控回退策略：默认未知为绿，可配置灯效，断联关灯 / Independently enable monitor fallback: unknown defaults to green, profiles are configurable, disconnection turns lights off
 #ifndef OMIPET_MONITOR_GREEN_OFF
 #define OMIPET_MONITOR_GREEN_OFF 0
 #endif
