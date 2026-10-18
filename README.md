@@ -196,7 +196,7 @@ WakeNet 是专门的唤醒模型，但当前 ESP-SR 模型包中的现成模型�
 
 Windows 主机端工具见 [Tools/CodexMonitor](Tools/CodexMonitor/README.md)：通过本地 Hook 采集多会话生命周期与审批状态，提供隐私保护、回归测试和只读诊断。用户 Hook 现启用可回退的事件关联侧文件；只有新事件与真实宿主配对的会话可进入显式状态实验，历史会话保持 unknown。上位机可通过 USB 或已配对的 WSS 传输。
 
-Windows 上位机统一在 [Tools/Desktop](Tools/Desktop/README.md)，使用 Tauri + React + MUI 界面和共享 Python 控制层；旧 Tk 程序已移除。支持 USB、本地灯光、Codex 监控、诊断和设置；六位码 WSS 配对、重连认证及无线灯光/监控已接入隔离实验，用户确认拔掉 USB 后仍可无线控制。验证边界见 [PAIRING.md](Tools/DeviceBridge/PAIRING.md)。完整灯光及跨连接最终输出读回仍待接入。便携包唯一启动入口为 `Tools/Desktop/release/OmiPet/OmiPet.exe`。
+Windows 上位机统一在 [Tools/Desktop](Tools/Desktop/README.md)，使用 Tauri + React + Microsoft Fluent UI 界面和共享 Python 控制层；旧 Tk 程序已移除。界面参考 WinUI Gallery，模块化布局并跟随系统切换白色/黑色主题。支持 USB、本地灯光、Codex 监控、诊断和设置；六位码 WSS 配对、重连认证及无线灯光/监控已接入隔离实验，用户确认拔掉 USB 后仍可无线控制。验证边界见 [PAIRING.md](Tools/DeviceBridge/PAIRING.md)。完整灯光及跨连接最终输出读回仍待接入。便携包唯一启动入口为 `Tools/Desktop/release/OmiPet/Omi.exe`。
 
 USB/Wi-Fi 共用协议与主机工具见 [Tools/DeviceBridge](Tools/DeviceBridge/README.md)。当前设备原应用支持扩散监控灯：无事件/完成/来源异常绿，运行红，审批黄；监控断联或租约结束关灯，语音优先，唤醒显示白色跑马灯。监控中禁止上位机手动调灯。协议仍区分 unknown 与 idle，绿色是显示策略，不伪造状态。
 

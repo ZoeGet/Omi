@@ -20,11 +20,14 @@ try {
     New-Item -ItemType Directory -Path $releaseDirectory -Force | Out-Null
     Copy-Item -LiteralPath $helperDirectory -Destination $releaseDirectory -Recurse -Force
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot "src-tauri/target/release/omipet-ui-pilot.exe") `
-        -Destination (Join-Path $releaseDirectory "OmiPet.exe") -Force
+        -Destination (Join-Path $releaseDirectory "Omi.exe") -Force
+    $legacyExecutable = Join-Path $releaseDirectory "OmiPet.exe"
+    if (Test-Path -LiteralPath $legacyExecutable) { Remove-Item -LiteralPath $legacyExecutable -Force }
     Copy-Item -LiteralPath $helperDirectory -Destination (Join-Path $PSScriptRoot "src-tauri/target/release") -Recurse -Force
     foreach ($name in @("README.md", "THIRD_PARTY_NOTICES.md")) {
         Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination $releaseDirectory -Force
     }
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot "src-tauri/icons/README.md") -Destination (Join-Path $releaseDirectory "APP_ICON_SOURCE.md") -Force
     & $Python (Join-Path $PSScriptRoot "collect_licenses.py") --output $releaseDirectory
     if ($LASTEXITCODE -ne 0) { throw "Dependency license collection failed" }
     Compress-Archive -LiteralPath $releaseDirectory -DestinationPath (Join-Path $PSScriptRoot "release/OmiPet-Windows-0.2.0.zip") -Force

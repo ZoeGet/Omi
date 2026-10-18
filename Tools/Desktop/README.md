@@ -1,6 +1,8 @@
 # OmiPet Windows 控制中心
 
-Tauri + React + MUI 界面复用 Python 设备控制层，支持 USB 与已配对的局域网 WSS。用户已确认窗口缩放及无线控制操作。当前唯一上位机目录为 `Tools/Desktop/`，旧 Tk 界面已退役。
+Tauri + React + Microsoft Fluent UI React 界面复用 Python 设备控制层，支持 USB 与已配对的局域网 WSS。界面按 WinUI Gallery 的导航和分组设置语言设计，跟随系统实时切换白色/黑色主题，不包含设备外观示意图。当前唯一上位机目录为 `Tools/Desktop/`，旧 Tk 界面已退役。
+
+界面品牌及窗口标题为 Omi。左侧栏边界可拖动调宽（160–320 px），也支持聚焦分隔线后按左右方向键、Home/End；小屏顶部导航布局隐藏拖动边界。便携包目录沿用原路径，启动文件为 `Omi.exe`。御坂美琴应用头像来源和制作说明见 [icons/README.md](src-tauri/icons/README.md)。
 
 ## 已接入
 
@@ -22,7 +24,7 @@ Tauri + React + MUI 界面复用 Python 设备控制层，支持 USB 与已配�
 
 ## 结构
 
-`App.tsx` 使用 CSS 响应式布局和 MUI 控件；没有窗口 resize 监听、手动画布重画或缩放延时。`backend.ts` 负责调用和显示事件，按既有 100 ms 界面轮询节奏读取后台结果；一轮完成后才安排下一轮。
+`App.tsx` 负责导航和共享本地灯光草稿；`Overview.tsx`、`LocalLights.tsx`、`MonitorLights.tsx` 与 `DevicePages.tsx` 分别负责设备概览、本地灯光、监控规则和配对/诊断/设置。`Surface.tsx` 共用模块、设置行和灯光控件；`theme.ts` 使用 Fluent UI 主题及系统外观监听。监控规则采用状态列表和单项编辑，切换状态保留草稿，一次保存全部五项；设备确认及版本冲突保护不变。CSS 响应式布局没有窗口 resize 监听、手动画布重画或缩放延时。`backend.ts` 按既有 100 ms 轮询节奏读取后台结果；一轮完成后才安排下一轮。
 
 Rust 只启动固定相邻路径 `omi-device/omi-device.exe` 并串行转发 JSON。管道读写运行在后台，关闭窗口先等待释放，再销毁窗口。Python `backend.py` 复用同目录的 `worker.py` / `controller.py`、`DeviceBridge`、`CodexMonitor`；USB/WSS 共用控制会话初始化、失败释放及协议重试。配对与控制共用 WSS 文本帧接收，各自保留消息校验和原超时。EOF 同样触发原有关闭流程；后台积压时只保留各类最新事件。
 
@@ -34,7 +36,7 @@ Rust 只启动固定相邻路径 `omi-device/omi-device.exe` 并串行转发 JSO
 
 选项工具归入黄色“等待操作”：同步工具返回后解除；异步工具创建窗口后的立即返回不解除，需收到带对应 `questionItemId` 的用户回复。选项中的自由输入同样处理；普通聊天文字不猜测为某个窗口的回答。只存调用 ID 和数量，不保存问题、选项或回答文本。协议沿用 `waitingApproval` 表示需要用户操作，避免要求更新设备固件。
 
-桌面程序可选择真实 USB 或已保存的无线设备；`OmiPet.exe --demo` 明确启用现有模拟设备。浏览器只预览，禁止设备操作。原生命令只接受主窗口调用，原生对话框仅授予选择文件/目录权限；不开放任意程序执行或远程网络接口。
+桌面程序可选择真实 USB 或已保存的无线设备；`Omi.exe --demo` 明确启用现有模拟设备。浏览器只预览，禁止设备操作。原生命令只接受主窗口调用，原生对话框仅授予选择文件/目录权限；不开放任意程序执行或远程网络接口。
 
 无线控制验收：104 项桥接、17 项桌面、8 项前端测试及原生 C++ 检查通过；17 项设备协议/输出检查通过。用户确认无线调灯、监控锁定及拔掉 USB 后继续控制正常。USB 有效监控优先、语音接管退出两路监控；界面显示本连接确认状态，完整跨连接输出读回仍待补。长期无线稳定性、真实断网恢复及本轮麦克风语音验收待测，详见 [PAIRING.md](../DeviceBridge/PAIRING.md)。
 
@@ -52,7 +54,7 @@ npm run build
 ./build_windows.ps1 -Python python
 ```
 
-便携包为 `release/OmiPet/OmiPet.exe`，zip 为 `release/OmiPet-Windows-0.2.0.zip`；必须保留旁边的 `omi-device/` 整个目录。包内包含 Python 与串口依赖，不需要用户额外安装 Python。`src-tauri/target/release/omipet-ui-pilot.exe` 是保留的内部构建名称；单独拷贝它不能工作。
+便携包为 `release/OmiPet/Omi.exe`，zip 为 `release/OmiPet-Windows-0.2.0.zip`；必须保留旁边的 `omi-device/` 整个目录。包内包含 Python 与串口依赖，不需要用户额外安装 Python。`src-tauri/target/release/omipet-ui-pilot.exe` 是保留的内部构建名称；单独拷贝它不能工作。
 
 `npm run dev` 仅在 `127.0.0.1:5173` 提供界面预览。`npm run tauri dev` 需先将构建出的 `build/helper/omi-device` 目录复制到 `src-tauri/target/debug/`；开发模式也使用同一后台，不引入另一套开发服务器协议。
 
@@ -74,10 +76,10 @@ python verify_usb.py --backend build/helper/omi-device/omi-device.exe --port COM
 
 2026-10-16 实体倒数第二颗曾出现红色不亮、白色偏青；更换该灯珠并恢复诊断前原应用后，用户确认红、白、黄全部正常。正式 RMT/灯效源码未因诊断改变。原生程序及后台关闭退出曾确认，完整语音接管、监控关闭与断线目视验收仍待补齐。不能把协议检查或单次目视结果扩展为长期稳定保证。
 
-旧 Tk 入口、专用控件、布局测试和 GUI 依赖已移除。保留控制器、工作线程、模拟器及对应测试；用户只启动 `release/OmiPet/OmiPet.exe`，旁边的 `omi-device/` 是内部通信后台，不是另一套上位机。
+旧 Tk 入口、专用控件、布局测试和 GUI 依赖已移除。保留控制器、工作线程、模拟器及对应测试；用户只启动 `release/OmiPet/Omi.exe`，旁边的 `omi-device/` 是内部通信后台，不是另一套上位机。
 
 2026-10-16 生命周期修复：171 项 Python、6 项界面测试及 Windows 打包通过。COM17 实测 60 秒内 56 次 ACK 均为 working，最长约 40 秒无新事件仍保持 working，零超时/解码错误，退出释放确认；另一轮选项窗口有 38 次 waitingApproval ACK 与扩散灯切换日志，但末尾发生 1 次 USB 短断线，随后重连关闭确认。真实选项回复 Hook 已确认待回复数 1→0、状态恢复 working。随后复测 60 秒有 55 次 ACK，确认 working→waitingApproval→working，用户目视确认黄色扩散；零超时/解码错误、link_losses 未新增，关闭释放确认。回复后红色目视尚未单独确认；未修改或烧录固件，USB 长期稳定性仍待查。
 
-界面实现参考：[Clash Verge Rev](https://github.com/clash-verge-rev/clash-verge-rev/blob/main/src/pages/home.tsx) 的 Tauri/React/MUI 与 Grid、[CC Switch](https://github.com/farion1231/cc-switch/blob/main/src/App.tsx) 的 Flex/滚动布局。没有复制其业务代码。
+当前界面参考微软开源 [WinUI Gallery](https://github.com/microsoft/WinUI-Gallery) 的导航层级、分组设置及自适应布局，实际使用 [Fluent UI React v9](https://github.com/microsoft/fluentui) 控件与 Fluent 图标；未复制 Gallery 的 XAML 或业务源码，Tauri 与 Python 通信架构保持。此前 MUI/Emotion 界面依赖已移除。
 
 2026-10-16 USB 修复：桥接器在外部预连接、首轮会话重建后也会重新握手并确认退出释放；88 项桥接、16 项桌面测试及 Windows 打包通过。用户确认并刷入 20 ms 信号过滤隔离固件，30 分钟 1613 次更新全部确认，过滤 9 次短脉冲，无断线/重连/超时/解码/音频队列/WDT异常，关闭释放确认。新鲜度、1 秒周期、2 秒超时、1 次重试和 5 秒租约未改。另有 3 次临时 `unknown` 尚未定位；来源异常按约定仍显示绿，不能据此宣称红绿状态完全稳定，目视及物理拔线待补。日志/镜像/回退只留本地，原始模型与词表 7 个文件内容哈希与备份一致。
