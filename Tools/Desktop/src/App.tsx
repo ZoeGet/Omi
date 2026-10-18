@@ -7,7 +7,7 @@ import { Overview } from './Overview';
 import { LocalLights, type LightDraft } from './LocalLights';
 import { MonitorLights } from './MonitorLights';
 import { Pairing, Diagnostics, Settings } from './DevicePages';
-import { useSystemTheme } from './theme';
+import { useAppTheme } from './theme';
 import type { Device } from './Surface';
 import { SidebarResize } from './SidebarResize';
 import appIcon from '../src-tauri/icons/256x256.png';
@@ -18,16 +18,16 @@ const pages = [
   { id: 'monitor-lights', title: '监控灯效', icon: <Pulse20Regular />, caption: '为每种 Codex 状态设置灯效，保存到设备。' },
   { id: 'pairing', title: '无线配对', icon: <Link20Regular />, caption: '通过设备屏幕上的六位码，建立可信无线连接。' },
   { id: 'diagnostics', title: '连接诊断', icon: <PlugConnected20Regular />, caption: '查看通信质量、设备健康和最近操作。' },
-  { id: 'settings', title: '设置', icon: <Settings20Regular />, caption: '管理本机 Codex 状态来源与宿主绑定。' },
+  { id: 'settings', title: '设置', icon: <Settings20Regular />, caption: '选择外观主题，管理 Codex 状态来源与宿主绑定。' },
 ];
 
 export default function App() {
   const device = useDevice();
-  const appearance = useSystemTheme();
+  const appearance = useAppTheme();
   return <Desktop device={device} appearance={appearance} />;
 }
 
-export function Desktop({ device, appearance: { dark, theme } }: { device: Device; appearance: ReturnType<typeof useSystemTheme> }) {
+export function Desktop({ device, appearance: { dark, theme, preference, setPreference } }: { device: Device; appearance: ReturnType<typeof useAppTheme> }) {
   const [page, setPage] = useState('overview');
   const [sidebarWidth, setSidebarWidth] = useState(216);
   const [light, setLight] = useState<LightDraft>({ color: '#FFFFFF', brightness: 16, effect: 'solid' });
@@ -60,7 +60,7 @@ export function Desktop({ device, appearance: { dark, theme } }: { device: Devic
             demo={device.demo} save={profile => void device.send('monitor-profile', profile)} read={() => void device.send('monitor-profile-read')} />}
           {page === 'pairing' && <Pairing device={device} navigate={setPage} />}
           {page === 'diagnostics' && <Diagnostics device={device} />}
-          {page === 'settings' && <Settings device={device} />}
+          {page === 'settings' && <Settings device={device} themePreference={preference} changeTheme={setPreference} />}
         </main>
         <footer className="app-notice" aria-live="polite"><span className="notice-dot" />{device.notice}</footer>
       </div>

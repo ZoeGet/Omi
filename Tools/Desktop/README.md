@@ -1,8 +1,10 @@
 # OmiPet Windows 控制中心
 
-Tauri + React + Microsoft Fluent UI React 界面复用 Python 设备控制层，支持 USB 与已配对的局域网 WSS。界面按 WinUI Gallery 的导航和分组设置语言设计，跟随系统实时切换白色/黑色主题，不包含设备外观示意图。当前唯一上位机目录为 `Tools/Desktop/`，旧 Tk 界面已退役。
+Tauri + React + Microsoft Fluent UI React 界面复用 Python 设备控制层，支持 USB 与已配对的局域网 WSS。界面按 WinUI Gallery 的导航和分组设置语言设计，支持浅色、深色和跟随系统主题，不包含设备外观示意图。当前唯一上位机目录为 `Tools/Desktop/`，旧 Tk 界面已退役。
 
 界面品牌及窗口标题为 Omi。左侧栏边界可拖动调宽（160–320 px），也支持聚焦分隔线后按左右方向键、Home/End；小屏顶部导航布局隐藏拖动边界。便携包目录沿用原路径，启动文件为 `Omi.exe`。御坂美琴应用头像来源和制作说明见 [icons/README.md](src-tauri/icons/README.md)。
+
+设置页顶部提供三张主题预览卡：浅色白底、深色黑底、跟随系统的明暗双面预览。点击立即切换，Windows 标题栏同步切换；选择保存在当前应用的本机存储 `omi.theme`，重启后恢复；默认跟随系统。固定主题不受 Windows 外观变化影响，切回跟随系统时使用当前系统外观；主题切换不要求断开设备。存储缺失或无效时回退系统主题，存储不可用时仍允许本次切换。
 
 ## 已接入
 
@@ -24,7 +26,7 @@ Tauri + React + Microsoft Fluent UI React 界面复用 Python 设备控制层，
 
 ## 结构
 
-`App.tsx` 负责导航和共享本地灯光草稿；`Overview.tsx`、`LocalLights.tsx`、`MonitorLights.tsx` 与 `DevicePages.tsx` 分别负责设备概览、本地灯光、监控规则和配对/诊断/设置。`Surface.tsx` 共用模块、设置行和灯光控件；`theme.ts` 使用 Fluent UI 主题及系统外观监听。监控规则采用状态列表和单项编辑，切换状态保留草稿，一次保存全部五项；设备确认及版本冲突保护不变。CSS 响应式布局没有窗口 resize 监听、手动画布重画或缩放延时。`backend.ts` 按既有 100 ms 轮询节奏读取后台结果；一轮完成后才安排下一轮。
+`App.tsx` 负责导航和共享本地灯光草稿；`Overview.tsx`、`LocalLights.tsx`、`MonitorLights.tsx` 与 `DevicePages.tsx` 分别负责设备概览、本地灯光、监控规则和配对/诊断/设置。`Surface.tsx` 共用模块、设置行和灯光控件；`theme.ts` 管理 Fluent UI 主题、本机偏好、系统外观监听和原生标题栏同步。监控规则采用状态列表和单项编辑，切换状态保留草稿，一次保存全部五项；设备确认及版本冲突保护不变。CSS 响应式布局没有窗口 resize 监听、手动画布重画或缩放延时。`backend.ts` 按既有 100 ms 轮询节奏读取后台结果；一轮完成后才安排下一轮。
 
 Rust 只启动固定相邻路径 `omi-device/omi-device.exe` 并串行转发 JSON。管道读写运行在后台，关闭窗口先等待释放，再销毁窗口。Python `backend.py` 复用同目录的 `worker.py` / `controller.py`、`DeviceBridge`、`CodexMonitor`；USB/WSS 共用控制会话初始化、失败释放及协议重试。配对与控制共用 WSS 文本帧接收，各自保留消息校验和原超时。EOF 同样触发原有关闭流程；后台积压时只保留各类最新事件。
 

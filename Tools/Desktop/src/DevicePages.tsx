@@ -3,6 +3,8 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { Button, Field, Input } from '@fluentui/react-components';
 import { FolderOpen20Regular } from '@fluentui/react-icons';
 import { Card, SettingRow, type Device } from './Surface';
+import type { ThemePreference } from './theme';
+import { ThemePicker } from './ThemePicker';
 
 export function Pairing({ device, navigate }: { device: Device; navigate: (page: string) => void }) {
   const [address, setAddress] = useState('');
@@ -41,7 +43,9 @@ export function Diagnostics({ device }: { device: Device }) {
   </Card><Card title="操作记录" caption="保留最近 200 条结果"><pre className="operation-log">{device.logs.join('\n') || '暂无操作记录'}</pre></Card></div>;
 }
 
-export function Settings({ device }: { device: Device }) {
+export function Settings({ device, themePreference, changeTheme }: {
+  device: Device; themePreference: ThemePreference; changeTheme: (preference: ThemePreference) => void;
+}) {
   const editable = device.ready && !device.connected && !device.busy;
   async function choose(directory: boolean) {
     try {
@@ -49,10 +53,13 @@ export function Settings({ device }: { device: Device }) {
       if (typeof path === 'string') device.settingsChanged(directory ? { root: path } : { bindings: path });
     } catch (error) { device.report(`无法选择路径：${error}`); }
   }
-  return <div className="detail-stack"><Card title="Codex 状态来源" caption="断开连接后可修改；监控沿用现有有效期与宿主校验">
+  return <div className="detail-stack"><Card title="外观" caption="选择应用主题，自动保存到本机">
+    <ThemePicker value={themePreference} change={changeTheme} />
+    <p className="module-note">浅色使用白色，深色使用黑色；跟随系统会随 Windows 外观自动变化。</p>
+  </Card><Card title="Codex 状态来源" caption="断开连接后可修改；监控沿用现有有效期与宿主校验">
     {([['root', '状态目录', true], ['bindings', '宿主绑定文件', false]] as const).map(([key, label, directory]) => <SettingRow key={key} title={label}>
       <Input aria-label={label} value={device.settings[key]} disabled={!editable} onChange={(_, data) => device.settingsChanged({ [key]: data.value })} />
       <Button icon={<FolderOpen20Regular />} disabled={!editable} onClick={() => void choose(directory)}>浏览</Button></SettingRow>)}
     <p className="module-note">监控期间延续已确认的运行与等待状态，收到结束事件后显示完成灯效；持续核对宿主进程。传输有效期 30 秒，保留既有余量；来源异常使用设备监控配置，断联关灯。</p>
-  </Card><Card title="外观" caption="自动跟随 Windows 系统外观"><SettingRow title="主题" description="浅色系统使用白色，深色系统使用黑色"><span className="muted">跟随系统</span></SettingRow></Card></div>;
+  </Card></div>;
 }

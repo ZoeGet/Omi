@@ -7,6 +7,7 @@ import type { Snapshot, WorkerEvent } from './backend';
 const bridge = vi.hoisted(() => ({ native: true, invoke: vi.fn(), events: [] as WorkerEvent[] }));
 vi.mock('@tauri-apps/api/core', () => ({ isTauri: () => bridge.native, invoke: bridge.invoke }));
 vi.mock('@tauri-apps/plugin-dialog', () => ({ open: vi.fn() }));
+vi.mock('@tauri-apps/api/window', () => ({ getCurrentWindow: () => ({ setTheme: vi.fn().mockResolvedValue(undefined) }) }));
 const local: Snapshot = { state: { mode: 'local', leaseActive: false, displayStatus: 'unknown', monitorOutput: 'local' },
   monitorRequested: false, monitorLights: true, monitorGreenOff: true, operations: ['light'], lastLight: null, diagnostics: {}, health: {} };
 function status(value: Partial<Snapshot> = {}): WorkerEvent { return { kind: 'status', ...local, ...value }; }
