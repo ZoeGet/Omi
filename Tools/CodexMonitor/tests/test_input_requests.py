@@ -49,7 +49,7 @@ class InputRequestTests(unittest.TestCase):
         self.send("PreToolUse", call="call-two")
         self.assertEqual(self.reply(), "working")
         self.send("Stop", turn="turn-a")
-        self.assertEqual(self.send("Stop", turn="turn-b"), "waitingApproval")
+        self.assertEqual(self.send("Stop", turn="turn-b"), "idle")
         self.assertEqual(self.reply("call-two"), "idle")
 
     def test_interrupt_and_session_end_cancel_pending_input(self):
@@ -63,17 +63,17 @@ class InputRequestTests(unittest.TestCase):
                     state = json.loads((self.root / "sessions/input-test.json").read_text(encoding="utf-8"))
                     self.assertEqual(state["status"], "offline")
 
-    def test_old_question_does_not_mask_work_but_returns_when_work_stops(self):
+    def test_background_question_does_not_mask_new_work_or_its_completion(self):
         self.send("PreToolUse")
         self.send("Stop")
         self.assertEqual(self.send("UserPromptSubmit", turn="new", prompt="continue"), "working")
         self.assertEqual(self.send("PermissionRequest", turn="new", tool="Bash", call="approval"), "waitingApproval")
         self.assertEqual(self.send("PostToolUse", turn="new", tool="Bash", call="approval"), "working")
-        self.assertEqual(self.send("Stop", turn="new"), "waitingApproval")
+        self.assertEqual(self.send("Stop", turn="new"), "idle")
         self.assertEqual(self.reply(), "working")
         self.assertEqual(self.send("Stop", turn="turn-b"), "idle")
 
-    def test_legacy_closed_question_is_suppressed_only_while_work_runs(self):
+    def test_legacy_question_is_preserved_without_blocking_a_new_task(self):
         self.send("PreToolUse")
         self.send("Stop")
         path = self.root / "sessions/input-test.json"
@@ -82,7 +82,7 @@ class InputRequestTests(unittest.TestCase):
             turn.pop("asyncInputIds", None)
         path.write_text(json.dumps(state), encoding="utf-8")
         self.assertEqual(self.send("UserPromptSubmit", turn="new"), "working")
-        self.assertEqual(self.send("Stop", turn="new"), "waitingApproval")
+        self.assertEqual(self.send("Stop", turn="new"), "idle")
 
     def test_sync_input_and_another_chat_wait_still_take_priority(self):
         self.send("UserPromptSubmit", turn="running")
@@ -95,6 +95,45 @@ class InputRequestTests(unittest.TestCase):
         self.assertEqual(snapshot["overallStatus"], "waitingApproval")
         current = next(s for s in snapshot["sessions"] if s["sessionId"] == "input-test")
         self.assertEqual(current["status"], "working")
+
+    def test_orphan_working_turn_does_not_keep_new_completed_work_red(self):
+        self.send("UserPromptSubmit", turn="orphan")
+        self.send("UserPromptSubmit", turn="current")
+        self.assertEqual(self.send("Stop", turn="current"), "idle")
+        state = json.loads((self.root / "sessions/input-test.json").read_text(encoding="utf-8"))
+        self.assertFalse(next(t for t in state["turnStates"] if t["turnId"] == "orphan")["closed"])
+        self.assertEqual(state["foregroundTurnId"], "current")
+        self.assertEqual(self.send("PreToolUse", turn="orphan", tool="Bash", call="late"), "idle")
+        self.assertEqual(self.send("Stop", turn="orphan"), "idle")
+
+    def test_old_approval_remains_visible_until_matching_completion(self):
+        self.send("PermissionRequest", turn="older", tool="Bash", call="approval")
+        self.send("UserPromptSubmit", turn="newer")
+        self.assertEqual(self.send("Stop", turn="newer"), "waitingApproval")
+        self.assertEqual(self.send("PostToolUse", turn="older", tool="Bash", call="approval"), "idle")
+
+    def test_migration_retains_current_work_and_does_not_revive_orphans_after_stop(self):
+        self.send("UserPromptSubmit", turn="older")
+        self.send("Stop", turn="older")
+        self.send("UserPromptSubmit", turn="orphan")
+        self.send("UserPromptSubmit", turn="current")
+        path = self.root / "sessions/input-test.json"
+        state = json.loads(path.read_text(encoding="utf-8"))
+        state.pop("foregroundTurnId")
+        path.write_text(json.dumps(state), encoding="utf-8")
+        self.assertEqual(self.send("Stop", turn="older"), "working")
+        self.assertEqual(self.send("Stop", turn="current"), "idle")
+
+    def test_background_questions_are_not_falsely_marked_answered(self):
+        self.send("PreToolUse", call="old-question")
+        self.send("Stop")
+        self.send("UserPromptSubmit", turn="newer")
+        self.assertEqual(self.send("Stop", turn="newer"), "idle")
+        state = json.loads((self.root / "sessions/input-test.json").read_text(encoding="utf-8"))
+        self.assertEqual(state["pendingInputCount"], 1)
+        old = next(t for t in state["turnStates"] if t["turnId"] == "turn-a")
+        self.assertIn("old-question", old["pendingInputIds"])
+        self.assertNotIn("old-question", old["completedInputIds"])
 
     def test_questions_answers_and_tool_arguments_are_not_saved(self):
         self.send("PreToolUse", tool_input={"questions": ["PRIVATE_QUESTION"]})

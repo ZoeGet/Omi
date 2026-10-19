@@ -118,6 +118,7 @@ def collect(root, payload):
             state.setdefault("completedInputIds", [])
             state.setdefault("asyncInputIds", [])
         baseline = previous.get("baselineStatus", "unknown")
+        foreground_turn = previous.get("foregroundTurnId", previous.get("turnId", ""))
         session_closed = previous.get("status") == "offline"
         if previous.get("schema") == 1 and previous.get("turnId"):
             legacy = new_turn(previous["turnId"])
@@ -140,6 +141,7 @@ def collect(root, payload):
                 state["completedInputIds"].extend(sorted(matched))
         if event_name == "SessionEnd":
             session_closed = True
+            foreground_turn = ""
             for state in turns.values():
                 state["closed"] = True
                 state["pendingInputIds"] = []
@@ -149,6 +151,7 @@ def collect(root, payload):
                 baseline = "unknown"
         elif event_name in ("UserPromptSubmit", "PreToolUse", "PostToolUse", "PermissionRequest",
                             "Stop", "Interrupt", "SubagentStart"):
+            new_submission = event_name == "UserPromptSubmit" and turn_id not in turns
             state = turns.setdefault(turn_id, new_turn(turn_id))
             if state["closed"] and event_name != "Interrupt":
                 applied = False
@@ -157,6 +160,8 @@ def collect(root, payload):
                 applied = False
             else:
                 session_closed = False
+                if new_submission or not foreground_turn:
+                    foreground_turn = turn_id
                 if (event_name in ("PreToolUse", "PostToolUse")
                         and payload.get("tool_name") in ("request_user_input", "request_user_input_async")):
                     if event_name == "PreToolUse" and tool_id and tool_id not in state["completedInputIds"]:
@@ -193,9 +198,11 @@ def collect(root, payload):
             selected_status = turn_status(state)
 
         active = [state for state in turns.values() if not state["closed"] or state["pendingInputIds"]]
-        #  旧异步问题不覆盖同一聊天正在执行的新任务，真实审批仍优先。 / Old async questions do not mask running work in the same chat; approvals retain priority.
-        running = any(not state["closed"] and turn_status(state) == "working" for state in active)
-        displayed = [state for state in active if not (running and state["closed"] and state["pendingInputIds"])]
+        #  新任务接替同聊天旧轮次；保留历史问题记录，真实阻塞审批仍优先。 / New work supersedes old turns in the same chat; retain question history and prioritize blocking approvals.
+        displayed = [state for state in active if state["turnId"] == foreground_turn
+                     or not state["turnId"] or not state["closed"] and (
+                         state["pendingToolIds"] or state["unattributedApproval"]
+                         or set(state["pendingInputIds"]) - set(state["asyncInputIds"]))]
         status = "offline" if session_closed else aggregate([turn_status(state) for state in displayed], baseline)
         received_at = timestamp()
         metadata = dict(schema=2, sessionId=session_id, status=status, turnId=turn_id,
@@ -210,7 +217,7 @@ def collect(root, payload):
                      turnStatus=selected_status, applied=applied)
         with (root / "events.jsonl").open("a", encoding="utf-8") as stream:
             stream.write(json.dumps(event, ensure_ascii=False, separators=(",", ":")) + "\n")
-        state = dict(metadata, lastEvent=event_name, updatedAtUtc=received_at,
+        state = dict(metadata, lastEvent=event_name, updatedAtUtc=received_at, foregroundTurnId=foreground_turn,
                      baselineStatus=baseline, turnStates=[turns[key] for key in sorted(turns)])
         atomic_json(path, state)
         sessions = [json.loads(file.read_text(encoding="utf-8")) for file in directory.glob("*.json")]
