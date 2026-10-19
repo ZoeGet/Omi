@@ -59,7 +59,9 @@ export function Overview({ device, light, navigate }: { device: Device; light: L
   return <div className="overview-grid">
     <Card title="设备连接" caption="选择 USB 直连或 Wi-Fi，连接后可控制灯光与 Codex 监控" className="connection-module">
       <div className="connection-content"><div className="connection-summary"><span className="module-symbol">{connected ? device.transport === 'wifi' ? 'WI-FI' : 'USB' : 'USB / WI-FI'}</span>
-        <h3>{connected ? '连接已建立' : '连接你的 Omi'}</h3><p className="muted">{connected ? device.transport === 'wifi' ? '可信无线连接' : 'USB 串口连接' : wifi ? '选择已配对设备，无需再次输入配对码' : '使用数据线连接设备，选择 USB 串口'}</p></div>
+        <h3>{connected ? '连接已建立' : '连接你的 Omi'}</h3><p className="muted">{connected ? device.transport === 'wifi' ? '可信无线连接' : 'USB 串口连接'
+          : wifi ? <>同一局域网 · <Button className="connection-pairing-link" appearance="transparent" disabled={busy} onClick={() => navigate('pairing')}>配对与设备管理</Button></>
+          : '使用数据线连接设备，选择 USB 串口'}</p></div>
         <div className="connection-controls"><TabList aria-label="连接方式" selectedValue={connectionType}
           onTabSelect={(_, data) => setConnectionType(data.value as 'usb' | 'wifi')}>
           <Tab value="usb" aria-selected={connectionType === 'usb'} disabled={!canConfigure}>USB</Tab><Tab value="wifi" aria-selected={connectionType === 'wifi'} disabled={!canConfigure || device.demo}>Wi-Fi</Tab>
@@ -79,7 +81,6 @@ export function Overview({ device, light, navigate }: { device: Device; light: L
           </Select><Button icon={<ArrowSync20Regular />} disabled={!canConfigure} onClick={() => void device.refresh()} aria-label="刷新串口" /></div>}
           <div className="button-row"><Button appearance="primary" disabled={!canConnect}
             onClick={() => void device.send(wifi ? 'connect-wireless' : 'connect', wifi ? { ...settings, port: wirelessAddress } : settings)}>连接设备</Button><Button disabled={!connected || busy} onClick={() => void device.send('disconnect')}>断开连接</Button></div>
-          {wifi && !connected && <p className="module-note">电脑与设备需处于可互通的局域网。首次配对、换网寻址或待验证的设备，请前往<Button appearance="transparent" disabled={busy} onClick={() => navigate('pairing')}>配对与设备管理</Button>。</p>}
         </div></div>
     </Card>
     <Card title="控制模式" caption="选择本地控制，或跟随 Codex 状态">
