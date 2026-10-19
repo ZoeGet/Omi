@@ -64,9 +64,9 @@ python Tools/CodexMonitor/make_hooks.py --collector $monitorCollectorPath
 
 | 状态 | 含义 |
 | --- | --- |
-| `working` | 存在正在执行且未被同步输入或真实审批阻塞的已观测轮次 |
-| `waitingApproval` | 存在真实审批/同步输入，或当前无运行轮次而仍有异步待回复问题 |
-| `idle` | 已观测轮次结束/中断，且没有其他运行轮次或待回复问题 |
+| `working` | 当前用户任务正在执行，且没有优先显示的同步输入或真实审批 |
+| `waitingApproval` | 存在真实审批/同步输入，或当前任务已停止而仍有本任务的异步待回复问题 |
+| `idle` | 当前用户任务结束/中断，且没有仍参与显示判定的运行或等待项 |
 | `offline` | 收到 `SessionEnd` |
 | `unknown` | 来源不足、关联不明或缺失必要标识 |
 
@@ -76,7 +76,7 @@ python Tools/CodexMonitor/make_hooks.py --collector $monitorCollectorPath
 
 通用 `PermissionRequest` 不保证提供调用 ID。缺失时，后续工具活动不能证明是哪一项审批结束，状态会降级为 `unknown`/`approvalUnconfirmed`，直到本轮结束。`PostToolUse` 只证明调用已返回，不能单独推断用户批准还是拒绝。
 
-按轮次保留已结束记录，可阻止迟到事件复活旧任务。记录尚未自动裁剪。汇总只覆盖已观测会话，不能代表 Desktop 所有聊天。原始采集器不靠定时器制造业务事件；长时间没有新事件不能证明空闲或仍在线。桌面实际通过下文 `LifecycleReader` 校验宿主存活并延续已确认生命周期，但不提供独立逐聊天存活证明。
+按轮次保留已结束记录，可阻止迟到事件复活旧任务。`foregroundTurnId` 跟踪当前用户提交的任务；新提交接替旧任务，迟到的旧工具事件/Stop 不会抢回前台。旧未结束轮次不再永久占用运行状态，背景异步问题保留 pending 记录但不阻止新任务完成；真正未完成的权限审批、同步输入和无标识事件仍保守处理。记录尚未自动裁剪。汇总只覆盖已观测会话，不能代表 Desktop 所有聊天。原始采集器不靠定时器制造业务事件；长时间没有新事件不能证明空闲或仍在线。桌面实际通过下文 `LifecycleReader` 校验宿主存活并延续已确认生命周期，但不提供独立逐聊天存活证明。
 
 ## 只读视图与桌面生命周期 / Read-only views and desktop lifecycle
 
@@ -90,11 +90,11 @@ python Tools/CodexMonitor/make_hooks.py --collector $monitorCollectorPath
 | `sourceState=readable` | 文件可读，不代表 Codex 或采集器在线 |
 | `liveness=unverified` | 当前没有持续存活证据 |
 
-CLI 默认未设置新鲜度策略，各会话显示 `unknown`，不会将历史红/黄/绿作为当前状态。调用方可显式传入正数 `--max-age-seconds`；测试中的 10 秒仅为合成边界测试。`read_bound_view` 保持该保守行为。桌面专用 `LifecycleReader` 只在近期、精确事件证明且宿主存活时接纳生命周期；后续没有新 Hook 仍保持工作/等待，独立评估传输有效期，不改写事件时间。来源不可读、身份/证明变化或宿主失效会清除接纳记录，重开监控不会接纳过期历史。它不证明具体聊天存活；漏掉 Stop 而宿主仍存活时可能保留旧状态。
+CLI 默认未设置新鲜度策略，各会话显示 `unknown`，不会将历史红/黄/绿作为当前状态。调用方可显式传入正数 `--max-age-seconds`；测试中的 10 秒仅为合成边界测试。`read_bound_view` 保持该保守行为。桌面专用 `LifecycleReader` 只在近期、精确事件证明且宿主存活时接纳生命周期；后续没有新 Hook 仍保持工作/等待，独立评估传输有效期，不改写事件时间。来源不可读、身份/证明变化或宿主失效会清除接纳记录，重开监控不会接纳过期历史。它不证明具体聊天存活；当前任务漏掉 Stop 且没有新的用户任务接替时仍可能保留旧状态；新的用户任务会接替旧任务，自己的 Stop 可正常结束。
 
 2026-10-16 一致性修复：`bound_collector.py` 在原有同目录互斥锁内完成生命周期与侧文件发布，桌面读取同样持有这把锁，避免新快照配上旧证明而短暂降级。锁的原有 1 秒等待上限不变；无法取得锁时仍显示 unknown 并清除延续资格，不沿用未核验状态。桌面后台和已安装包装器需配套更新；只升级其中一个不能保证一致性。并发回归已先复现旧实现读到半次发布，再验证新实现等待完整发布后读到结束状态；此前 30 分钟的 3 次 unknown 缺少逐次原因，不能全部归因于这一竞态。
 
-`request_user_input` 的 Pre/Post 对应等待/回复完成；`request_user_input_async` 的 Post 只表示窗口已创建，等待需保留到 `UserPromptSubmit` 中对应 `send_user_message_question_reply` / `questionItemId` 回复，或中断/会话结束。待回复跨 Stop 保留，防止创建选项后结束本轮便错误变绿；其他工具调用与无关联文本不清除它。同一聊天继续执行时显示 working，只有没有正在执行的轮次而仍有异步待回复问题时显示 waitingApproval；真实权限审批和同步输入仍优先显示 waitingApproval。不同聊天之间仍保持等待优先。自由输入选项使用同一回复关联，不保存问题、选项或回答文本。该应用回复格式来自本机实测，非通用 Hooks 稳定协议；格式改变需重新验证。[官方 Hooks 文档](https://learn.chatgpt.com/docs/hooks) 的工具返回事件不能等同异步人工回复。
+`request_user_input` 的 Pre/Post 对应等待/回复完成；`request_user_input_async` 的 Post 只表示窗口已创建，等待需保留到 `UserPromptSubmit` 中对应 `send_user_message_question_reply` / `questionItemId` 回复，或中断/会话结束。待回复跨 Stop 保留，防止创建选项后结束本轮便错误变绿；其他工具调用与无关联文本不清除它。同一聊天继续执行时显示 working，当前任务停止且仍有本任务的异步问题时显示 waitingApproval；新用户任务接替后，旧问题只保留为背景记录，不自动标记已回答，也不覆盖新任务的完成状态；真实权限审批和同步输入仍优先显示 waitingApproval。不同聊天之间仍保持等待优先。自由输入选项使用同一回复关联，不保存问题、选项或回答文本。该应用回复格式来自本机实测，非通用 Hooks 稳定协议；格式改变需重新验证。[官方 Hooks 文档](https://learn.chatgpt.com/docs/hooks) 的工具返回事件不能等同异步人工回复。
 
 每个会话分别计算年龄，不使用全局快照生成时间刷新其他聊天。超期、未来时间、缺少时区或非法记录均显示未知；静默不会产生 `Stop`、`idle` 或 `offline`。汇总保留等待审批、工作、未知、空闲、离线的优先级，未知会阻止仅凭另一个空闲会话显示全局空闲。
 
@@ -173,6 +173,34 @@ python Tools/CodexMonitor/audit.py --session <session-id> --turn <turn-id>
 生命周期测试包含 52 条合成事件和 6 会话并发；测试报告写在输出注明的临时目录，不写源码目录。审计工具支持 `--root` 指定其他来源、`--output` 导出报告。按目标轮次检查 `turnStatus`，不要用另一个聊天的 `Stop` 或当前会话的新消息替代完成证据。
 
 2026-10-14 的实测边界：中文回复结束可正确记录 `Stop`；一个修复后的 `request_permissions` 窗口在用户批准后完成 `waitingApproval → working → idle`，同一调用的待审批数从 1 变为 0。期间其他聊天活动未覆盖等待状态。此为有限样本，拒绝、所有审批来源、长期稳定性和失联处理未全部验证。
+
+## Codex 更新后排查与本次修复 / Upgrade troubleshooting
+
+2026-10-19 修复了两个独立问题，之后复现时应分开诊断：
+
+- **来源异常**：本机 Codex 更新后，原先选定的带版本目录的 `codex.exe` 路径失效，采集器的 `allowedImages` 仍指向旧路径。重新选择当前实际运行的 Codex 程序、修复安装、信任新 Hook，再取得真实同调用 Pre/Post 配对后恢复 `ready`。这是本次路径变化的原因，不能把所有来源异常都归因于更新。
+- **结束后一直红**：真实 `Stop` 已收到，目标轮次 `turnStatus=idle`，会话汇总却仍 `status=working`；历史漏结束事件的轮次一直参与汇总。修复在 `collector.py` 保存 `foregroundTurnId`，由新用户任务接替旧普通工作；迟到的旧工具/Stop 不夺回前台。背景异步问题保留 pending，不伪造回答，也不阻止新任务完成；本任务待回复问题、真实审批与同步阻塞仍按前文规则处理。旧状态缺少此字段时从原 `turnId` 迁移。
+
+### 恢复顺序
+
+1. 保留日志及安装记录。在 Omi 设置的监控入口重新检测，核对当前实际运行的 Codex 程序；不要固定某个版本目录，也不要仅因同名进程就放宽路径校验。
+2. 若路径变化，断开设备，重新选择当前 Codex 程序，点击“修复 / 更新监控”。若同时升级了采集逻辑，先更新完整 Omi 发布包，再通过此入口更新已安装组件：只换仓库源码、ZIP 或 Omi.exe 不会替换独立安装的旧采集器。覆盖发布目录前从托盘真正退出 Omi。
+3. 安装器备份并合并自有 Hook，保留其他工具配置。在 Codex 审查并信任新定义；若新定义尚未加载，重新加载配置或重启 Codex 后再审查。不要自动修改信任记录，不要把重复点击安装当成收到事件的替代品。
+4. 让 Codex 执行普通工具操作，再重新检测。确认 `hook-receipt.json` 的 `installationId` 与当前安装收据一致，宿主同一会话/轮次/调用的 Pre/Post 关联确认，设置显示 `ready`。单有采集事件或进程存在不够。
+5. 开启设备监控，执行约 30 秒操作，结束后观察；再发送一个异步选项，暂不回答，观察黄灯，回答后观察恢复。默认颜色应为运行红、结束绿、待回复黄；自定义灯效按对应状态验收。真实权限审批另测，不为测试制造危险操作。
+
+### 需要保留的证据
+
+- `%LOCALAPPDATA%/OmiPet/monitor-setup.json`：当前安装 ID、所选 Codex 路径、运行目录及文件哈希；`monitor-backups/` 保存安装前配置。
+- 状态目录中的 `hook-receipt.json`、`host-bindings.json`、`events.jsonl`、`sessions/*.json`：核对实际执行的版本、宿主关联和目标轮次事件。`CODEX_HOME` 或状态目录被显式改动时以实际配置为准。
+- 结束仍红时，先区分“未收到目标 Stop”和“收到 Stop 但汇总错误”；对比 `turnStatus`、会话 `status`、`foregroundTurnId`、各轮次等待项。全会话 `pendingInputCount` 可含背景问题，非零不一定应亮黄灯。沿用上文 `audit.py --session ... --turn ...`，不要用其他轮次的 Stop 代替证据。
+- 以上安装记录和日志含个人路径/标识，仅本地保留；不要提交 Git。不要删除快照、伪造 Stop 或放宽宿主校验来让灯变绿。
+
+### 本次验证与边界
+
+80 项监控单元测试、13 项输入/前台轮次专项测试、原有 9 组审批回归（52 合成事件/6 并发会话）、冻结采集器验证及 Windows 打包通过。2026-10-19 用户保持设备监控连接：30 秒真实操作期间为 `working`，用户确认结束恢复绿；异步选项未回答时确认黄，回答后再次确认正常。对应真实日志记录 `Stop → idle`、选项待回复 `Stop → waitingApproval`、回答后的 `Stop → idle`。本轮未重新实测真实权限审批、断线与长期运行；当前任务漏 Stop 且无新任务接替仍无法独立证明完成。Codex 若改变事件字段、异步回复格式或宿主结构，需要重新验证并按证据修复，不保证升级后永不适配。
+
+本机完整交接见 `tmp/monitor-foreground-20261019/handoff.json`（忽略目录，非分发依赖）。
 
 ## 回退 / Rollback
 
