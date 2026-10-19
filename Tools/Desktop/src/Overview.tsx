@@ -4,7 +4,6 @@ import { ArrowRight20Regular, ArrowSync20Regular } from '@fluentui/react-icons';
 import { Card, LightStrip, effectLabels, type Device } from './Surface';
 import { lightColor, lightDescription } from './MonitorLights';
 import type { LightDraft } from './LocalLights';
-import { ConnectionCheck } from './ConnectionCheck';
 
 export function Overview({ device, light, navigate }: { device: Device; light: LightDraft; navigate: (page: string) => void }) {
   const { connected, busy, snapshot, settings } = device;
@@ -88,7 +87,7 @@ export function Overview({ device, light, navigate }: { device: Device; light: L
         <div className="mode-row" key={key}><div><strong>{text}</strong><small>{note}</small></div>
           <Switch checked={Boolean(key === 'local' ? local : monitorConnected)} disabled={!active || key === 'monitor' && !monitorReady}
             onChange={() => void device.send(key)} aria-label={text} /></div>)}</div>
-      <p className="module-note">{connected && !monitorReady ? '当前固件不支持监控灯光规则。' : '监控中锁定手动调灯，语音可立即接管。'}</p>
+      {connected && !monitorReady && <p className="module-note">当前固件不支持监控灯光规则。</p>}
     </Card>
     <Card title="监控状态" caption={device.transport === 'wifi' ? '本连接已确认状态；同时监控时 USB 优先' : '最近一次设备确认的状态'}>
       <div className="status-display"><span className="status-indicator" style={{ backgroundColor: display.color }} /><div><h3 role="status">{display.title}</h3><p>{display.note}</p></div></div>
@@ -102,7 +101,6 @@ export function Overview({ device, light, navigate }: { device: Device; light: L
       <div className="preview-caption"><span className="muted">{monitoring ? display.note : `${effectLabels[light.effect]} · ${light.effect === 'rainbow' ? '独立彩虹色谱' : light.color} · 亮度 ${Math.round(light.brightness / 255 * 100)}%`}</span>
         <Button appearance="subtle" icon={<ArrowRight20Regular />} iconPosition="after" onClick={() => navigate('lights')}>调整灯光</Button></div>
     </Card>
-    <ConnectionCheck device={device} navigate={navigate} />
     <section className="metrics" aria-label="连接摘要">{[['连接方式', device.demo ? '模拟设备' : !connected ? '未连接' : device.transport === 'wifi' ? 'Wi-Fi' : 'USB'], ['通信超时', `${snapshot.diagnostics?.replyTimeouts ?? 0} 次`],
       ['当前模式', !connected ? '等待连接' : !confirmed ? '待确认' : monitoring ? 'Codex 监控' : '本地灯光'],
       ['输出状态', monitorConnected ? '监控输出' : connected ? '本地控制' : '连接未建立']].map(([key, value]) => <div key={key}><small>{key}</small><strong>{value}</strong></div>)}</section>

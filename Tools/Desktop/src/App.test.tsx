@@ -76,7 +76,7 @@ describe('USB desktop', () => {
     bridge.invoke.mockClear();
     render(<App />);
     await waitFor(() => expect((screen.getByRole('tab', { name: 'USB' }) as HTMLButtonElement).disabled).toBe(false));
-    expect(bridge.invoke.mock.calls.filter(([, args]) => args.message.action === 'monitor-setup-status')).toHaveLength(1);
+    expect(bridge.invoke.mock.calls.filter(([, args]) => args.message.action === 'monitor-setup-status')).toHaveLength(0);
     expect(screen.queryByRole('heading', { name: '配置 Codex 监控' })).toBeNull();
   });
 

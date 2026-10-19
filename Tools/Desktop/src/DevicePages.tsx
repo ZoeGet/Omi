@@ -87,10 +87,10 @@ export function Pairing({ device, navigate }: { device: Device; navigate: (page:
   </div>;
 }
 
-export function Diagnostics({ device }: { device: Device }) {
+export function Diagnostics({ device, navigate }: { device: Device; navigate: (page: string) => void }) {
   const diagnostic = device.snapshot.diagnostics ?? {};
   const health = device.snapshot.health ?? {};
-  return <div className="detail-stack"><ConnectionCheck device={device} /><Card title="通信与设备健康" caption="本次连接内的汇总，不保存原始会话内容">
+  return <div className="detail-stack"><ConnectionCheck device={device} navigate={navigate} /><Card title="通信与设备健康" caption="本次连接内的汇总，不保存原始会话内容">
     <dl className="diagnostic-grid">{[['通信超时', diagnostic.replyTimeouts ?? 0], ['解码错误', diagnostic.decodeIssues ?? 0],
       ['最长往返', `${Math.round(diagnostic.maxRoundTripMs ?? 0)} ms`], ['麦克风', health.microphoneOk ? '已观测正常' : '未观测'],
       ['音频队列异常', health.audioQueueProblem ? '有记录' : '未观测'], ['看门狗 / 崩溃', health.watchdogOrPanic ? '有记录' : '未观测']].map(([name, value]) => <div key={String(name)}><dt>{name}</dt><dd>{String(value)}</dd></div>)}</dl>

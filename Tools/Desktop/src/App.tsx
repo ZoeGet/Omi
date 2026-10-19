@@ -77,7 +77,7 @@ export function Desktop({ device, appearance: { dark, theme, preference, setPref
             enabled={active && Boolean(device.snapshot.state)} connected={device.connected} supported={Boolean(device.snapshot.operations?.includes('monitorProfile'))}
             demo={device.demo} save={profile => void device.send('monitor-profile', profile)} read={() => void device.send('monitor-profile-read')} />}
           {page === 'pairing' && <Pairing device={device} navigate={setPage} />}
-          {page === 'diagnostics' && <Diagnostics device={device} />}
+          {page === 'diagnostics' && <Diagnostics device={device} navigate={setPage} />}
           {page === 'settings' && <Settings device={device} themePreference={preference} changeTheme={setPreference} />}
         </main>
         <footer className="app-notice" aria-live="polite"><span className="notice-dot" />{device.notice}</footer>
