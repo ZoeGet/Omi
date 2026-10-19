@@ -94,6 +94,44 @@ char gRenderedPairingCountdown[6] = {};
 bool gDateTimeRendered = false;
 bool gPairingCountdownRendered = false;
 bool gPairingVisible = false;
+bool gTaskEnabled = false;
+bool gTaskConnected = false;
+bool gTaskDirty = false;
+bool gTaskRendered = false;
+OmiPetProtocol::TaskScreen gRenderedTaskScreen;
+//  固定区域缓冲，避免先擦除再画字；不占用音频栈 / Fixed region buffer avoids erase-before-text and audio-stack allocation
+uint16_t gTaskBuffer[206 * 50];
+bool gTaskBuffering = false;
+int16_t gBufferX = 0, gBufferY = 0, gBufferWidth = 0, gBufferHeight = 0;
+
+void taskPixel(int x, int y, uint16_t color) {
+  if (x >= gBufferX && y >= gBufferY && x < gBufferX + gBufferWidth && y < gBufferY + gBufferHeight)
+    gTaskBuffer[(y - gBufferY) * gBufferWidth + x - gBufferX] = color;
+}
+void uiBitmap(int16_t x, int16_t y, uint16_t width, uint16_t height, const uint16_t* pixels) {
+  if (!gTaskBuffering) { OmiPetDisplay::lcd.drawBitmap(x, y, width, height, pixels); return; }
+  for (unsigned row = 0; row < height; ++row)
+    for (unsigned col = 0; col < width; ++col) taskPixel(x + col, y + row, pixels[row * width + col]);
+}
+void taskFrame(int x, int y) {
+  constexpr int radius = 9, width = 206, height = 50;
+  for (int col = radius; col < width - radius; ++col) {
+    taskPixel(x + col, y, kPanelLine); taskPixel(x + col, y + height - 1, kPanelLine);
+  }
+  for (int row = radius; row < height - radius; ++row) {
+    taskPixel(x, y + row, kPanelLine); taskPixel(x + width - 1, y + row, kPanelLine);
+  }
+  for (int row = 0; row < radius; ++row) for (int col = 0; col < radius; ++col) {
+    const int d = (radius - col) * (radius - col) + (radius - row) * (radius - row);
+    if (d >= (radius - 1) * (radius - 1) && d <= radius * radius) {
+      taskPixel(x + col, y + row, kPanelLine); taskPixel(x + width - 1 - col, y + row, kPanelLine);
+      taskPixel(x + col, y + height - 1 - row, kPanelLine); taskPixel(x + width - 1 - col, y + height - 1 - row, kPanelLine);
+    }
+  }
+}
+OmiPetProtocol::TaskScreen gTaskScreen;
+
+bool taskPageVisible() { return gTaskEnabled && !gPairingVisible; }
 char gPairingCode[7] = {};
 char gPairingAddress[16] = {};
 uint16_t gPairingSecondsRemaining = 0;
@@ -160,7 +198,7 @@ void drawText(int16_t x, int16_t y, const char* text, uint8_t scale,
         }
       }
     }
-    OmiPetDisplay::lcd.drawBitmap(x, y, glyphWidth, glyphHeight,
+    uiBitmap(x, y, glyphWidth, glyphHeight,
                                   gGlyphBitmap);
     x += static_cast<int16_t>(6 * scale);
   }
@@ -208,7 +246,7 @@ void drawChangedText(int16_t x, int16_t y, const char* text, uint8_t scale,
 
 //  更新时间和日期，只重绘发生变化的字符 / Update time and date, redrawing only changed characters
 void drawDateTime() {
-  if (gPairingVisible) return;
+  if (gPairingVisible || taskPageVisible()) return;
   char clockText[6] = {};
   char dateText[11] = {};
   formatDateTimeTexts(clockText, sizeof(clockText), dateText, sizeof(dateText));
@@ -427,6 +465,100 @@ void drawStaticUi() {
   drawVoiceStatus(true);
   drawBatteryStatus(true);
 }
+//  四张固定位置的任务气泡；标题不写入设备日志 / Four fixed task bubbles; titles are never written to device logs
+void drawTaskScreen(unsigned part) {
+  if (part == 0) {
+    drawText(8, 5, "CODEX", 1, kAccent);
+    if (!gTaskConnected) {
+      drawCenteredTextInArea(0, kScreenWidth, 65, "CONNECTION LOST", 2, kRed);
+      return;
+    }
+    if (!gTaskScreen.available) {
+      drawCenteredTextInArea(0, kScreenWidth, 65, "TASK SOURCE UNAVAILABLE", 1, kYellow);
+      return;
+    }
+    char total[24];
+    std::snprintf(total, sizeof(total), "ACTIVE %u%s", gTaskScreen.active, gTaskScreen.active > 4 ? "  MORE" : "");
+    drawText(270, 5, total, 1, kWhite);
+    if (!gTaskScreen.active) {
+      drawCenteredTextInArea(0, kScreenWidth, 65, "NO ACTIVE TASKS", 2, kGreen);
+      return;
+    }
+    if (gTaskScreen.active > 4) {
+      char more[24];
+      std::snprintf(more, sizeof(more), "MORE %u ACTIVE", gTaskScreen.active - 4);
+      drawText(8, 132, more, 1, kYellow);
+    }
+  }
+  if (!gTaskConnected || !gTaskScreen.available || !gTaskScreen.active || part == 0) return;
+  for (unsigned slot = 0; slot < 4; ++slot) {
+    if (slot != part - 1) continue;
+    const auto& card = gTaskScreen.cards[slot];
+    if (!card.used) continue;
+    const int16_t x = 4 + (slot % 2) * 214;
+    const int16_t y = 21 + (slot / 2) * 54;
+    taskFrame(x, y);
+    bool ink = false;
+    uint16_t row[160];
+    for (unsigned line = 0; line < 16; ++line) {
+      for (unsigned col = 0; col < 160; ++col) {
+        const unsigned bit = line * 160 + col;
+        const bool on = card.pixels[bit / 8] & (0x80U >> (bit % 8));
+        ink = ink || on;
+        row[col] = on ? kWhite : kBackground;
+      }
+      uiBitmap(x + 10, y + 6 + line, 160, 1, row);
+    }
+    if (!ink) drawText(x + 10, y + 10, "TITLE UNAVAILABLE", 1, kWhite);
+    if (gTaskScreen.hasLabels) {
+      const auto* label = gTaskScreen.labels + (card.waiting ? 0 : 128);
+      for (unsigned line = 0; line < 16; ++line) {
+        for (unsigned col = 0; col < 64; ++col) {
+          const unsigned bit = line * 64 + col;
+          row[col] = label[bit / 8] & (0x80U >> (bit % 8)) ? (card.waiting ? kYellow : kRed) : kBackground;
+        }
+        uiBitmap(x + 10, y + 28 + line, 64, 1, row);
+      }
+    } else drawText(x + 10, y + 31, card.waiting ? "WAITING FOR INPUT" : "WORKING", 1, card.waiting ? kYellow : kRed);
+  }
+}
+//  在内存中完成区域绘制，再一次传送最终像素 / Finish each region in memory before transferring its final pixels
+void flushTaskRegion(int16_t x, int16_t y, int16_t width, int16_t height, unsigned part) {
+  gBufferX = x; gBufferY = y; gBufferWidth = width; gBufferHeight = height;
+  std::memset(gTaskBuffer, 0, width * height * sizeof(uint16_t));
+  gTaskBuffering = true;
+  drawTaskScreen(part);
+  gTaskBuffering = false;
+  OmiPetDisplay::lcd.drawBitmap(x, y, width, height, gTaskBuffer);
+}
+void refreshTasks() {
+  const auto& old = gRenderedTaskScreen;
+  const bool full = !gTaskRendered || old.available != gTaskScreen.available ||
+                    (old.active == 0) != (gTaskScreen.active == 0);
+  if (full) OmiPetDisplay::lcd.fillScreen(kBackground);
+  if (full || old.active != gTaskScreen.active) {
+    flushTaskRegion(0, 0, kScreenWidth, 20, 0);
+    flushTaskRegion(0, 130, kScreenWidth, 12, 0);
+  }
+  if (full && (!gTaskScreen.available || !gTaskScreen.active))
+    flushTaskRegion(0, 60, kScreenWidth, 20, 0);
+  if (gTaskScreen.available && gTaskScreen.active) for (unsigned slot = 0; slot < 4; ++slot) {
+    const auto& card = gTaskScreen.cards[slot];
+    const auto& previous = old.cards[slot];
+    const int16_t x = 4 + (slot % 2) * 214, y = 21 + (slot / 2) * 54;
+    if (full || previous.used != card.used) {
+      flushTaskRegion(x, y, 206, 50, slot + 1);
+    } else if (card.used) {
+      if (std::memcmp(previous.pixels, card.pixels, 320) != 0)
+        flushTaskRegion(x + 10, y + 6, 160, 16, slot + 1);
+      if (previous.waiting != card.waiting || old.hasLabels != gTaskScreen.hasLabels ||
+          std::memcmp(old.labels, gTaskScreen.labels, 256) != 0)
+        flushTaskRegion(x + 10, y + 28, 160, 16, slot + 1);
+    }
+  }
+  gRenderedTaskScreen = gTaskScreen;
+  gTaskRendered = true;
+}
 }  //  匿名命名空间 / Anonymous namespace
 
 //  初始化界面时钟、静态布局和首帧内容 / Initialize the UI clock, static layout, and first frame
@@ -446,7 +578,7 @@ void setEnvironment(float temperatureC, float humidityPercent, bool valid) {
   gTemperatureC = temperatureC;
   gHumidityPercent = humidityPercent;
   gEnvironmentValid = valid;
-  if (gUiStarted) {
+  if (gUiStarted && !taskPageVisible()) {
     char newTemperatureText[12] = {};
     char newHumidityText[10] = {};
     formatEnvironmentValues(gEnvironmentValid, gTemperatureC, gHumidityPercent,
@@ -469,7 +601,7 @@ void setBatteryStatus(uint8_t percent, bool valid) {
   }
   gBatteryPercent = percent;
   gBatteryValid = valid;
-  if (gUiStarted) {
+  if (gUiStarted && !taskPageVisible()) {
     drawBatteryStatus(false);
   }
 }
@@ -487,7 +619,7 @@ void setNetworkStatus(bool connected, bool provisioning, const char* ssid) {
   gNetworkProvisioning = provisioning;
   std::strncpy(gWifiName, safeSsid, sizeof(gWifiName) - 1U);
   gWifiName[sizeof(gWifiName) - 1U] = '\0';
-  if (gUiStarted) {
+  if (gUiStarted && !taskPageVisible()) {
     drawNetworkStatus(false);
   }
 }
@@ -509,7 +641,7 @@ void setDateTime(bool valid, int year, int month, int day, int hour,
   gDateTimeDay = day;
   gDateTimeHour = hour;
   gDateTimeMinute = minute;
-  if (gUiStarted) {
+  if (gUiStarted && !taskPageVisible()) {
     drawDateTime();
   }
 }
@@ -521,7 +653,7 @@ void setVoiceStatus(const char* statusText) {
   }
 
   gVoiceStatus = statusText;
-  if (gUiStarted) {
+  if (gUiStarted && !taskPageVisible()) {
     drawVoiceStatus(false);
   }
 }
@@ -538,13 +670,15 @@ void setPairingCode(const char* sixDigits, uint16_t secondsRemaining, const char
   if (!valid) {
     if (!gPairingVisible) return;
     gPairingVisible = false;
+    gTaskDirty = true;
+    gTaskRendered = false;
     volatile char* codeBytes = gPairingCode;
     for (size_t index = 0; index < sizeof(gPairingCode); ++index) {
       codeBytes[index] = '\0';
     }
     gPairingSecondsRemaining = 0;
     gPairingCountdownRendered = false;
-    if (gUiStarted) {
+    if (gUiStarted && !taskPageVisible()) {
       OmiPetDisplay::lcd.fillRect(kCenterCardLeft + 2, kCenterCardTop + 2,
                                   kCenterCardWidth - 4, kCenterCardHeight - 4,
                                   kBackground);
@@ -561,18 +695,45 @@ void setPairingCode(const char* sixDigits, uint16_t secondsRemaining, const char
   const bool codeChanged = !gPairingVisible || std::strcmp(gPairingAddress, nextAddress) != 0 ||
                            std::strcmp(gPairingCode, sixDigits) != 0;
   if (!codeChanged && gPairingSecondsRemaining == secondsRemaining) return;
+  const bool enteringPairing = !gPairingVisible;
   gPairingVisible = true;
+  if (enteringPairing && gTaskEnabled && gUiStarted) { gTaskRendered = false; drawStaticUi(); }
   gPairingSecondsRemaining = secondsRemaining;
   if (codeChanged) {
     std::memcpy(gPairingAddress, nextAddress, sizeof(gPairingAddress));
     std::memcpy(gPairingCode, sixDigits, sizeof(gPairingCode));
-    if (gUiStarted) drawPairingCard();
-  } else if (gUiStarted) {
+    if (gUiStarted && !taskPageVisible()) drawPairingCard();
+  } else if (gUiStarted && !taskPageVisible()) {
     drawPairingCountdown();
   }
 }
 //  保留 UI 更新入口，时间内容由联网时间状态驱动 / Keep the UI update entry point driven by network time state
+void setTaskScreen(bool enabled, bool connected, const OmiPetProtocol::TaskScreen* screen) {
+  enabled = enabled && connected;
+  OmiPetProtocol::TaskScreen empty;
+  const auto& next = screen ? *screen : empty;
+  bool changed = gTaskEnabled != enabled || gTaskConnected != connected ||
+                 gTaskScreen.available != next.available || gTaskScreen.active != next.active ||
+                 gTaskScreen.hasLabels != next.hasLabels || std::memcmp(gTaskScreen.labels, next.labels, 256) != 0;
+  for (unsigned i = 0; i < 4; ++i) {
+    changed = changed || gTaskScreen.cards[i].used != next.cards[i].used ||
+              gTaskScreen.cards[i].waiting != next.cards[i].waiting ||
+              std::memcmp(gTaskScreen.cards[i].pixels, next.cards[i].pixels, 320) != 0;
+  }
+  if (!changed) return;
+  gTaskDirty = true;
+  if (gTaskEnabled != enabled) gTaskRendered = false;
+  gTaskEnabled = enabled;
+  gTaskConnected = connected;
+  gTaskScreen = next;
+}
 void update() {
-  if (!gPairingVisible) drawDateTime();
+  if (gTaskDirty && !gPairingVisible && gUiStarted) {
+    if (gTaskEnabled) {
+      refreshTasks();
+      gTaskDirty = false;
+    } else { gTaskDirty = false; gDateTimeRendered = false; drawStaticUi(); }
+  }
+  if (!gPairingVisible && !gTaskEnabled) drawDateTime();
 }
 }  //  OmiPetUi 命名空间 / OmiPetUi namespace

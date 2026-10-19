@@ -122,6 +122,77 @@ void clockAndInputBoundaries() {
   require(!input.view().leaseActive, "invalid input cannot prevent expiry");
 }
 
+//  任务位图与快照原子提交，过期后心跳不能恢复旧标题 / Commit task rasters atomically with snapshots; heartbeats cannot revive expired titles
+void taskCardSnapshot() {
+  ProtocolSession session(kBoot, kLimits);
+  char output[4097];
+  require(session.open(kChannel, 0, output, sizeof(output)) == SessionResult::Reply, "task open");
+  require(session.receive(kHello, std::strlen(kHello), 1, output, sizeof(output)) == SessionResult::Reply, "task hello");
+  cJSON* request = cJSON_Parse(kHello);
+  cJSON_ReplaceItemInObject(request, "type", cJSON_CreateString("snapshot"));
+  cJSON_ReplaceItemInObject(request, "seq", cJSON_CreateNumber(2));
+  cJSON* body = cJSON_CreateObject();
+  cJSON_ReplaceItemInObject(request, "body", body);
+  cJSON_AddNumberToObject(body, "revision", 1);
+  cJSON_AddNumberToObject(body, "validForMs", 400);
+  cJSON_AddStringToObject(body, "sourceLiveness", "unverified");
+  cJSON_AddStringToObject(body, "overallStatus", "working");
+  cJSON* sessions = cJSON_AddArrayToObject(body, "sessions");
+  cJSON* entry = cJSON_CreateObject();
+  cJSON_AddItemToArray(sessions, entry);
+  for (const char* key : {"observed", "display"}) cJSON_AddStringToObject(entry, key, "working");
+  cJSON_AddStringToObject(entry, "id", "s1");
+  cJSON_AddStringToObject(entry, "host", "running");
+  cJSON* screen = cJSON_AddObjectToObject(body, "taskCards");
+  cJSON_AddNumberToObject(screen, "active", 1);
+  cJSON_AddStringToObject(screen, "labels", (std::string(342, 'A') + "==").c_str());
+  cJSON* cards = cJSON_AddArrayToObject(screen, "cards");
+  cJSON* card = cJSON_CreateObject();
+  cJSON_AddItemToArray(cards, card);
+  cJSON_AddNumberToObject(card, "slot", 0);
+  cJSON_AddStringToObject(card, "id", "s1");
+  const std::string bitmap = std::string(427, 'A') + "=";
+  cJSON_AddStringToObject(card, "bitmap", bitmap.c_str());
+  char* raw = cJSON_PrintUnformatted(request);
+  require(session.receive(raw, std::strlen(raw), 2, output, 2) == SessionResult::OutputTooSmall, "task short output");
+  require(!session.taskScreen(), "task short output must not commit");
+  require(session.receive(raw, std::strlen(raw), 2, output, sizeof(output)) == SessionResult::Reply, "task retry");
+  cJSON_free(raw);
+  require(session.taskScreen() && session.taskScreen()->available && session.taskScreen()->hasLabels && session.taskScreen()->active == 1 &&
+          session.taskScreen()->cards[0].used, "task snapshot committed");
+  cJSON_ReplaceItemInObject(request, "seq", cJSON_CreateNumber(3));
+  cJSON_ReplaceItemInObject(body, "revision", cJSON_CreateNumber(2));
+  cJSON_ReplaceItemInObject(card, "slot", cJSON_CreateNumber(4));
+  raw = cJSON_PrintUnformatted(request);
+  require(session.receive(raw, std::strlen(raw), 3, output, sizeof(output)) == SessionResult::Reply, "bad task ack");
+  cJSON_free(raw);
+  cJSON* reply = cJSON_Parse(output);
+  require(cJSON_IsFalse(field(field(reply, "body"), "ok")), "bad task rejected");
+  require(session.taskScreen() && session.taskScreen()->cards[0].used, "bad task cannot partly replace screen");
+  cJSON_Delete(reply);
+  cJSON_ReplaceItemInObject(card, "slot", cJSON_CreateNumber(0));
+  unsigned sequence = 4;
+  for (const std::string& bad : {std::string(427, 'A') + "?", "!" + std::string(426, 'A') + "=", std::string(426, 'A') + "B="}) {
+    cJSON_ReplaceItemInObject(request, "seq", cJSON_CreateNumber(sequence++));
+    cJSON_ReplaceItemInObject(card, "bitmap", cJSON_CreateString(bad.c_str()));
+    raw = cJSON_PrintUnformatted(request);
+    require(session.receive(raw, std::strlen(raw), sequence, output, sizeof(output)) == SessionResult::Reply, "bad raster ack");
+    cJSON_free(raw);
+    reply = cJSON_Parse(output);
+    require(cJSON_IsFalse(field(field(reply, "body"), "ok")), "bad raster rejected");
+    require(session.taskScreen() && session.taskScreen()->cards[0].used, "bad raster preserves last good screen");
+    cJSON_Delete(reply);
+  }
+  cJSON_ReplaceItemInObject(request, "seq", cJSON_CreateNumber(sequence));
+  cJSON_ReplaceItemInObject(request, "type", cJSON_CreateString("heartbeat"));
+  cJSON_ReplaceItemInObject(request, "body", cJSON_CreateObject());
+  raw = cJSON_PrintUnformatted(request);
+  require(session.receive(raw, std::strlen(raw), 403, output, sizeof(output)) == SessionResult::Reply, "task heartbeat");
+  require(session.view().leaseActive && !session.taskScreen(), "heartbeat must not revive stale task titles");
+  cJSON_free(raw);
+  cJSON_Delete(request);
+}
+
 void vectors(const char* path) {
   std::ifstream source(path);
   require(source.good(), "fixture open");
@@ -169,6 +240,7 @@ void vectors(const char* path) {
 
 int main(int argc, char** argv) {
   try {
+    taskCardSnapshot(); std::cout << "PASS task_card_snapshot_atomicity_expiry\n";
     outputAtomicity(); std::cout << "PASS session_output_atomicity\n";
     allocationFailures(); std::cout << "PASS session_allocation_failures\n";
     welcomeAndSnapshotAllocationFailures(); std::cout << "PASS session_welcome_snapshot_allocation_failures\n";

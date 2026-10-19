@@ -17,6 +17,8 @@ bool configureUsbExperiment();
 void reportUsbExperiment();
 //  提供当前逻辑状态供隔离灯光仲裁读取 / Expose the current logical state for isolated LED arbitration
 SessionView usbExperimentView();
+//  读取当前USB快照的任务屏数据，仅在主循环调用 / Read task-screen data from the current USB snapshot on the main loop only
+const TaskScreen* usbTaskScreen();
 LocalLightCommand usbLocalLightCommand();
 MonitorOutput usbMonitorOutput();
 void yieldUsbMonitorToVoice();

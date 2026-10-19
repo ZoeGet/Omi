@@ -132,6 +132,7 @@ SessionView usbExperimentView() {
 LocalLightCommand usbLocalLightCommand() {
   return gTransport ? gTransport->localLightCommand() : LocalLightCommand{};
 }
+const TaskScreen* usbTaskScreen() { return gTransport ? gTransport->taskScreen() : nullptr; }
 
 MonitorOutput usbMonitorOutput() {
   return gTransport ? gTransport->monitorOutput() : MonitorOutput::Local;

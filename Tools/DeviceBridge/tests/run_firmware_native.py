@@ -83,6 +83,11 @@ def main():
         run(["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror", *sanitizer,
              "-I" + path(output), path(native / "audio_budget_native.cpp"), "-o", path(output / "audio_budget_native")])
         audio_result = run([path(output / "audio_budget_native")])
+        run(["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror", *sanitizer,
+             "-I" + path(native / "task_ui"), "-I" + path(includes),
+             path(native / "task_ui_native.cpp"), path(repository / "Firmware/src/omi_pet_ui.cpp"),
+             "-o", path(output / "task_ui_native")])
+        task_ui_result = run([path(output / "task_ui_native")])
         run(["gcc", "-std=c99", *sanitizer, "-I" + path(cjson), "-c", path(cjson / "cJSON.c"),
              "-o", path(output / "cjson.o")])
         run(["g++", "-std=c++11", "-Wall", "-Wextra", "-Werror", *sanitizer, *fixture_flags,
@@ -199,6 +204,7 @@ void tick(bool sof) { USB_SERIAL_JTAG.int_raw.sof_int_raw = sof ? 1 : 0; usb_ser
         print(arbiter_result.stdout, end="")
         print(effect_result.stdout, end="")
         print(audio_result.stdout, end="")
+        print(task_ui_result.stdout, end="")
         print(pairing_result.stdout, end="")
         print(monitor_transport_result.stdout, end="")
         report = dict(result="pass", configChecks=19,
@@ -212,6 +218,7 @@ void tick(bool sof) { USB_SERIAL_JTAG.int_raw.sof_int_raw = sof ? 1 : 0; usb_ser
                       arbiterTests=[line[5:] for line in arbiter_result.stdout.splitlines() if line.startswith("PASS ")],
                       effectTests=[line[5:] for line in effect_result.stdout.splitlines() if line.startswith("PASS ")],
                       audioBudgetTests=[line[5:] for line in audio_result.stdout.splitlines() if line.startswith("PASS ")],
+                      taskUiTests=[line[5:] for line in task_ui_result.stdout.splitlines() if line.startswith("PASS ")],
                       pairingWindowTests=[line[5:] for line in pairing_result.stdout.splitlines() if line.startswith("PASS ")],
                       monitorTransportTests=[line[5:] for line in monitor_transport_result.stdout.splitlines() if line.startswith("PASS ")],
                       sofTests=sof_tests,

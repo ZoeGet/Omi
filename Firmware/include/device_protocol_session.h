@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include "task_screen.h"
 
 struct cJSON;
 
@@ -57,6 +58,10 @@ class ProtocolSession {
   bool advance(uint64_t nowMs);
   void disconnect();
   SessionView view() const;
+  //  仅在快照及连接仍有效时返回任务，心跳不能延长标题有效期 / Return tasks only while snapshot and connection are valid; heartbeats cannot extend title validity
+  const TaskScreen* taskScreen() const {
+    return state_.leaseActive && now_ - state_.snapshotStart < state_.snapshotValidity ? &state_.screen : nullptr;
+  }
   void setMonitorProfileStore(MonitorProfileStore* store) { profiles_ = store; }
   LocalLightCommand localLightCommand() const { return light_; }
   void allowLocalLightCommand(bool allowed, const char* reason = "voice-active") { localLightAllowed_ = allowed; localLightReason_ = reason; }
@@ -77,6 +82,7 @@ class ProtocolSession {
     bool expired = false;
     bool monitor = false;
     const char* display = "unknown";
+    TaskScreen screen;
   };
   SessionView stateView(const State& state) const;
   SessionResult writeAck(const cJSON* request, const State& state, bool ok,

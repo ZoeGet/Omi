@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include "task_screen.h"
 
 namespace OmiPetUi {
 
@@ -26,5 +27,7 @@ void setPairingCode(const char* sixDigits, uint16_t secondsRemaining, const char
 
 //  按秒更新时钟 / Update the clock once per second
 void update();
+//  Codex模式切换为四槽任务屏，断联清除旧任务 / Switch Codex mode to a four-slot task screen and clear tasks on disconnect
+void setTaskScreen(bool enabled, bool connected, const OmiPetProtocol::TaskScreen* screen);
 
 }  //  OmiPetUi 命名空间 / OmiPetUi namespace

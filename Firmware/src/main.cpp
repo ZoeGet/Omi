@@ -572,14 +572,18 @@ void updateMonitorLights() {
   using namespace OmiPetLed;
   OmiPetProtocol::SessionView view = OmiPetProtocol::usbExperimentView();
   auto monitorOutput = OmiPetProtocol::usbMonitorOutput();
+  const auto* taskScreen = OmiPetProtocol::usbTaskScreen();
 #if OMIPET_WIFI_CONTROL
   const auto wifi = OmiPetProtocol::wirelessControlView();
   if (gMonitorTransport.select(view, wifi, true) == OmiPetProtocol::MonitorTransport::Wifi) {
     view = wifi;
     monitorOutput = OmiPetProtocol::wirelessMonitorOutput();
+    taskScreen = OmiPetProtocol::wirelessTaskScreen();
   }
 #endif
   const bool voiceOverride = gVoiceLightOverride.observe(view);
+  OmiPetUi::setTaskScreen(monitorOutput != OmiPetProtocol::MonitorOutput::Local && !voiceOverride && !gWakeLightActive,
+                         monitorOutput == OmiPetProtocol::MonitorOutput::Connected, taskScreen);
   if (gWakeLightActive) return;
 #if OMIPET_MONITOR_GREEN_OFF
   const LightArbitrationPolicy policy{LightFallback::Green, LightFallback::Green};

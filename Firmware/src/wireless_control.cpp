@@ -98,6 +98,7 @@ void pollWirelessControl(bool networkConnected, bool localAllowed, const char* r
 }
 
 SessionView wirelessControlView() { return session ? session->view() : SessionView{"local", "unknown", false, 0, 0}; }
+const TaskScreen* wirelessTaskScreen() { return session ? session->taskScreen() : nullptr; }
 MonitorOutput wirelessMonitorOutput() { return session ? session->monitorOutput() : MonitorOutput::Local; }
 LocalLightCommand wirelessLocalLightCommand() { return session ? session->localLightCommand() : LocalLightCommand{}; }
 void yieldWirelessMonitorToVoice() { if (session) session->yieldMonitorToVoice(); }

@@ -12,6 +12,8 @@ bool exchangeWirelessControl(uint32_t connection, const char* data, size_t size,
 void closeWirelessControl(uint32_t connection);
 void pollWirelessControl(bool connected, bool localAllowed, const char* reason);
 SessionView wirelessControlView();
+//  读取当前无线快照的任务屏数据，仅在主循环调用 / Read task-screen data from the current wireless snapshot on the main loop only
+const TaskScreen* wirelessTaskScreen();
 MonitorOutput wirelessMonitorOutput();
 LocalLightCommand wirelessLocalLightCommand();
 void yieldWirelessMonitorToVoice();

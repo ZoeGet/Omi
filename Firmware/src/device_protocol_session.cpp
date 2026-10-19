@@ -128,12 +128,77 @@ bool sameRequest(const cJSON* left, const cJSON* right) {
 }
 
 //  所有会话校验完成后才提交快照，错误不产生部分应用 / Commit a snapshot only after every session passes validation without partial application
+bool decodeRaster(const cJSON* node, uint8_t* output, unsigned size) {
+  const unsigned encoded = ((size + 2) / 3) * 4;
+  const unsigned padding = (3 - size % 3) % 3;
+  if (!cJSON_IsString(node) || std::strlen(node->valuestring) != encoded) return false;
+  const char* text = node->valuestring;
+  const char* alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  uint32_t bits = 0;
+  unsigned count = 0, written = 0;
+  for (unsigned i = 0; i < encoded - padding; ++i) {
+    const char* symbol = text[i] ? std::strchr(alphabet, text[i]) : nullptr;
+    if (!symbol) return false;
+    bits = (bits << 6) | static_cast<unsigned>(symbol - alphabet);
+    count += 6;
+    if (count >= 8) {
+      count -= 8;
+      if (written >= size) return false;
+      output[written++] = static_cast<uint8_t>(bits >> count);
+    }
+  }
+  for (unsigned i = encoded - padding; i < encoded; ++i) if (text[i] != '=') return false;
+  return written == size && !(bits & ((1U << count) - 1));
+}
+
+const char* taskCards(const cJSON* body, TaskScreen& screen) {
+  screen = TaskScreen{};
+  const cJSON* value = field(body, "taskCards");
+  if (!value) return nullptr;
+  const char* const names[] = {"active", "cards"};
+  const char* const labelNames[] = {"active", "cards", "labels"};
+  const bool hasLabels = field(value, "labels") != nullptr;
+  uint32_t active = 0;
+  const cJSON* cards = field(value, "cards");
+  unsigned actual = 0;
+  const cJSON* sessions = field(body, "sessions");
+  for (const cJSON* s = sessions->child; s; s = s->next) {
+    if (equalText(field(s, "display"), "working") || equalText(field(s, "display"), "waitingApproval")) ++actual;
+  }
+  if (!(hasLabels ? fields(value, labelNames, 3) : fields(value, names, 2)) || !unsignedNumber(field(value, "active"), 0, active) || active != actual ||
+      !cJSON_IsArray(cards) || cJSON_GetArraySize(cards) != static_cast<int>(actual > 4 ? 4 : actual)) return "invalid-task-cards";
+  if (hasLabels && !decodeRaster(field(value, "labels"), screen.labels, 256)) return "invalid-task-labels";
+  screen.hasLabels = hasLabels;
+  for (const cJSON* card = cards->child; card; card = card->next) {
+    const char* const cardNames[] = {"slot", "id", "bitmap"};
+    uint32_t slot = 0;
+    if (!fields(card, cardNames, 3) || !unsignedNumber(field(card, "slot"), 0, slot) || slot >= 4 ||
+        screen.cards[slot].used || !alias(field(card, "id"))) return "invalid-task-card";
+    for (const cJSON* prior = cards->child; prior != card; prior = prior->next) {
+      if (equalText(field(prior, "id"), field(card, "id")->valuestring)) return "invalid-task-card";
+    }
+    const cJSON* match = nullptr;
+    for (const cJSON* s = sessions->child; s; s = s->next) {
+      if (equalText(field(s, "id"), field(card, "id")->valuestring)) match = s;
+    }
+    if (!match || (!equalText(field(match, "display"), "working") && !equalText(field(match, "display"), "waitingApproval"))) return "invalid-task-card";
+    if (!decodeRaster(field(card, "bitmap"), screen.cards[slot].pixels, 320)) return "invalid-task-bitmap";
+    screen.cards[slot].used = true;
+    screen.cards[slot].waiting = equalText(field(match, "display"), "waitingApproval");
+  }
+  screen.available = true;
+  screen.active = static_cast<uint8_t>(active);
+  return nullptr;
+}
+
 const char* snapshot(const cJSON* body, std::size_t maxSessions, uint32_t& revision,
-                     uint32_t& validity, const char*& display, uint32_t& challengeSeq) {
+                     uint32_t& validity, const char*& display, uint32_t& challengeSeq, TaskScreen& screen) {
   const char* const names[] = {"revision", "validForMs", "sourceLiveness", "overallStatus", "sessions"};
-  const char* const challengeNames[] = {"revision", "validForMs", "sourceLiveness", "overallStatus", "sessions", "challengeSeq"};
   const bool challenge = field(body, "challengeSeq") != nullptr;
-  if (!(challenge ? fields(body, challengeNames, 6) : fields(body, names, 5)) ||
+  const bool hasCards = field(body, "taskCards") != nullptr;
+  bool validFields = cJSON_IsObject(body) && cJSON_GetArraySize(body) == (challenge ? 6 : 5) + (hasCards ? 1 : 0);
+  for (const char* name : names) validFields = validFields && field(body, name);
+  if (!validFields ||
       !equalText(field(body, "sourceLiveness"), "unverified")) return "invalid-source-state";
   if (challenge && !unsignedNumber(field(body, "challengeSeq"), 1, challengeSeq)) return "invalid-challenge";
   if (!unsignedNumber(field(body, "revision"), 1, revision) ||
@@ -161,7 +226,8 @@ const char* snapshot(const cJSON* body, std::size_t maxSessions, uint32_t& revis
     if (status < best) best = status;
   }
   display = kStatuses[best == 5 ? 2 : best];
-  return equalText(field(body, "overallStatus"), display) ? nullptr : "inconsistent-overall-state";
+  if (!equalText(field(body, "overallStatus"), display)) return "inconsistent-overall-state";
+  return taskCards(body, screen);
 }
 
 cJSON* envelope(const char* boot, const char* channel, const char* session, uint32_t seq, const char* type) {
@@ -251,6 +317,7 @@ SessionResult ProtocolSession::open(const char* channel, uint64_t nowMs, char* o
 #endif
 #if OMIPET_MONITOR_LIGHTS
   if (ok) ok = cJSON_AddBoolToObject(body, "monitorLights", true) != nullptr;
+  if (ok) ok = cJSON_AddBoolToObject(body, "taskCards", true) != nullptr;
 #endif
 #if OMIPET_MONITOR_GREEN_OFF
   if (ok) ok = cJSON_AddBoolToObject(body, "monitorGreenOff", true) != nullptr;
@@ -376,9 +443,10 @@ SessionResult ProtocolSession::receive(const char* data, std::size_t length, uin
   } else {
     consume = true;
     if (info.type == CommandType::Snapshot) {
+      TaskScreen nextScreen;
       uint32_t revision = 0, validity = 0, challengeSeq = 0;
       const char* display = "unknown";
-      const char* issue = snapshot(body, limits_.maxSessions, revision, validity, display, challengeSeq);
+      const char* issue = snapshot(body, limits_.maxSessions, revision, validity, display, challengeSeq, nextScreen);
       if (issue) code = issue;
       else if (revision <= state_.revision) code = "snapshot-revision-stale";
 #if OMIPET_PROTOCOL_FRESHNESS_CHALLENGE
@@ -396,6 +464,7 @@ SessionResult ProtocolSession::receive(const char* data, std::size_t length, uin
         }
 #endif
         next.revision = revision;
+        next.screen = nextScreen;
         next.snapshotStart = now_;
         next.snapshotValidity = validity;
         next.display = display;

@@ -41,6 +41,7 @@ class ProtocolTransport {
 
   void setMonitorProfileStore(MonitorProfileStore* store) { session_.setMonitorProfileStore(store); }
   SessionView view() const { return session_.view(); }
+  const TaskScreen* taskScreen() const { return session_.taskScreen(); }
   LocalLightCommand localLightCommand() const { return session_.localLightCommand(); }
   void allowLocalLightCommand(bool allowed, const char* reason = "voice-active") { session_.allowLocalLightCommand(allowed, reason); }
   bool takeLocalSelection() { return session_.takeLocalSelection(); }
