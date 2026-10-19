@@ -686,7 +686,7 @@ void setup() {
 #endif
   OmiPetLed::strip.begin(16);
   OmiPetLed::effects.begin();
-  OmiPetLed::effects.setSolid(255, 255, 255);
+  OmiPetLed::effects.setRainbow();
 
   //  初始化无源蜂鸣器，但不自动播放声音 / Initialize the passive buzzer without playing sound automatically
   OmiPetBuzzer::buzzer.begin();
