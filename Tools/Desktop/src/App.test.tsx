@@ -82,10 +82,12 @@ describe('USB desktop', () => {
     const user = userEvent.setup();
     render(<App />);
     await user.click(screen.getByRole('button', { name: '无线配对' }));
+    await user.click(screen.getByText('配对帮助'));
+    await user.click(screen.getByRole('button', { name: '重新配对已有设备' }));
+    expect(screen.getByRole('alert').textContent).toContain('旧电脑的配对凭据将失效');
     await user.type(screen.getByLabelText('设备地址'), '192.0.2.42');
     await user.type(screen.getByLabelText('六位配对码'), '654321');
-    await user.click(screen.getByRole('checkbox', { name: '我确认重新配对，成功后旧电脑的配对凭据将失效' }));
-    await user.click(screen.getByRole('button', { name: '重新配对' }));
+    await user.click(screen.getByRole('button', { name: '确认重新配对' }));
     expect(bridge.invoke.mock.calls.some(([, args]) => args.message.action === 're-pair'
       && args.message.body.address === '192.0.2.42' && args.message.body.code === '654321')).toBe(true);
     expect((screen.getByLabelText('六位配对码') as HTMLInputElement).value).toBe('');
@@ -102,13 +104,14 @@ describe('USB desktop', () => {
     const user = userEvent.setup();
     render(<App />);
     await user.click(screen.getByRole('button', { name: '无线配对' }));
-    await user.click(await screen.findByRole('button', { name: '在当前网络查找' }));
+    await user.click(await screen.findByRole('button', { name: '重新查找设备' }));
     expect(bridge.invoke.mock.calls.some(([, args]) => args.message.action === 'find-wireless'
       && args.message.body.address === address)).toBe(true);
     expect((screen.getByRole('button', { name: '无线连接' }) as HTMLButtonElement).disabled).toBe(true);
     address = 'wss://192.0.2.42:8443/pair';
     bridge.events.push({ kind: 'pairing', ok: true, command: 'find-wireless', port: address });
-    await screen.findByText(address, { selector: 'strong' });
+    await screen.findByText('192.0.2.42', { selector: 'strong' });
+    await user.click(screen.getByText('更多操作'));
     await user.click(screen.getByRole('button', { name: '修改地址' }));
     await user.type(screen.getByLabelText('设备新地址'), '192.0.2.43');
     await user.click(screen.getByRole('button', { name: '验证并保存地址' }));
@@ -124,12 +127,38 @@ describe('USB desktop', () => {
     const user = userEvent.setup();
     render(<App />);
     await user.click(screen.getByRole('button', { name: '无线配对' }));
+    await screen.findByText('192.0.2.1', { selector: 'strong' });
+    expect(screen.queryByRole('button', { name: '验证连接' })).toBeNull();
+    expect(screen.getByRole('button', { name: '修改地址' }).closest('details')?.open).toBe(false);
+    expect(screen.queryByText('语音优先')).toBeNull();
     await user.click(await screen.findByRole('button', { name: '无线连接' }));
     expect(bridge.invoke.mock.calls.some(([, args]) => args.message.action === 'connect-wireless'
       && args.message.body.port === 'wss://192.0.2.1:8443/pair')).toBe(true);
     bridge.events.push({ kind: 'connected', port: 'wss://192.0.2.1:8443/pair', transport: 'wifi' }, status());
     await waitFor(() => expect((screen.getByRole('switch', { name: '本地灯光' }) as HTMLInputElement).disabled).toBe(false));
     expect(screen.getByText('可信无线连接')).toBeTruthy();
+  });
+  it.each([{ confirmed: false }, { confirmed: true, pendingRepair: true }])('keeps pending pairing recovery available for %j', async pairing => {
+    bridge.invoke.mockImplementation(async (_command, { message }) => ({ ok: true,
+      result: message.action === 'init' ? { demo: false, root: 'C:/state', bindings: 'C:/binding.json', ports: [] }
+        : message.action === 'paired-devices' ? [{ address: 'wss://192.0.2.1:8443/pair', ...pairing }] : null,
+      events: bridge.events.splice(0) }));
+    const user = userEvent.setup();
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: '无线配对' }));
+    await user.click(await screen.findByRole('button', { name: '验证连接' }));
+    expect(bridge.invoke.mock.calls.some(([, args]) => args.message.action === 'verify-wireless')).toBe(true);
+    expect(screen.queryByRole('button', { name: '无线连接' })).toBeNull();
+  });
+  it('explains the USB pairing lock and offers disconnect without reconnecting wirelessly', async () => {
+    render(<App />);
+    const user = await connect();
+    await user.click(screen.getByRole('button', { name: '无线配对' }));
+    expect(screen.getByText(/当前通过 USB 连接/)).toBeTruthy();
+    expect((screen.getByLabelText('设备地址') as HTMLInputElement).disabled).toBe(true);
+    await user.click(screen.getByRole('button', { name: '断开当前连接' }));
+    expect(bridge.invoke.mock.calls.some(([, args]) => args.message.action === 'disconnect')).toBe(true);
+    expect(bridge.invoke.mock.calls.some(([, args]) => args.message.action === 'connect-wireless')).toBe(false);
   });
   it('clears the pairing code on submit and waits for the backend result', async () => {
     const user = userEvent.setup();

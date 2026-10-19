@@ -119,7 +119,12 @@ p { margin: 0; font-size: 13px; line-height: 1.7; }
 .setting-control>span:has(input), .setting-control>div:has(input[type=range]) { flex: 1; }
 .setting-control input[type=range] { width: 100%; }
 .form-stack { display: grid; gap: 22px; padding: 6px 0; }
-.pairing-grid { grid-template-columns: 1fr 1fr; align-items: start; }
+.pairing-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+.pairing-connection-note { display: flex; gap: 16px; align-items: center; justify-content: space-between; padding: 16px 20px; border: 1px solid var(--line); border-radius: 8px; }
+.pairing-details { margin-top: 18px; }
+.pairing-details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+.pairing-details p { margin: 12px 0; overflow-wrap: anywhere; }
+.pairing-warning { padding: 12px; border: 1px solid var(--line); border-radius: 6px; margin-bottom: 16px; }
 .saved-device { padding: 18px 0; border-bottom: 1px solid var(--line); }
 .saved-device strong { overflow-wrap: anywhere; font-size: 13px; font-weight: 500; }
 .saved-device .button-row { margin-top: 16px; }

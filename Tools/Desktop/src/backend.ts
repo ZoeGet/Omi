@@ -32,7 +32,7 @@ const errors: Record<string, string> = {
   'voice-active': '设备正在响应语音，请稍后再应用灯光。',
   'usb-priority': 'USB 连接优先，请先断开 USB 控制再通过无线调灯。',
   'wireless-pairing-required': '请先在无线配对页保存此设备。',
-  'wireless-authentication-failed': '无线设备认证失败；换网后请到无线配对页，点击在当前网络查找。',
+  'wireless-authentication-failed': '无线设备认证失败；换网后请到无线配对页，点击重新查找设备。',
   'wireless-disconnected': '无线连接已断开，等待重新连接。',
   'wireless-send-failed': '无线发送失败，请检查设备网络。',
   'wireless-receive-failed': '无线接收失败，请检查设备网络。',

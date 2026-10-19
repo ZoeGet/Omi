@@ -64,7 +64,7 @@ export function Desktop({ device, appearance: { dark, theme, preference, setPref
           <span><i className={device.connected ? 'connection-dot online' : 'connection-dot'} />{device.busy ? '处理中…' : device.connected ? '已连接' : '未连接'}</span>
         </div></header>
         <main key={page} id="page-content"><div className="page-heading"><div><h1>{heading.title}</h1><p>{heading.caption}</p></div>
-          <span className="policy-label"><ShieldCheckmark20Regular />{device.demo ? '模拟设备' : '语音优先'}</span></div>
+          {page !== 'pairing' && <span className="policy-label"><ShieldCheckmark20Regular />{device.demo ? '模拟设备' : '语音优先'}</span>}</div>
           {page === 'overview' && <>{!setupChecked && !device.demo && <MonitorSetup device={device} firstRun completed={dismissSetup} />}<Overview device={device} light={light} navigate={setPage} /></>}
           {page === 'lights' && <LocalLights device={device} draft={light} change={setLight} />}
           {page === 'monitor-lights' && <MonitorLights key={`${device.endpoint}-${device.connected}`} profile={device.snapshot.monitorProfile}
