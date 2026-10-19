@@ -90,13 +90,13 @@ class Backend:
         if action == "paired-devices":
             from wireless_pairing import PairingStore
             return [] if self.demo else PairingStore().devices()
-        if action in ("pair", "re-pair", "verify-wireless", "find-wireless", "relocate-wireless"):
+        if action in ("pair", "re-pair", "inspect-wireless", "verify-wireless", "find-wireless", "relocate-wireless"):
             fields = {"address", "code"} if action in ("pair", "re-pair") else {"address", "previous"} if action == "relocate-wireless" else {"address"}
             if (self.demo or self.busy or self.connected or self.pairing_worker and self.pairing_worker.is_alive()
                     or not isinstance(body, dict) or set(body) != fields
                     or any(not isinstance(value, str) or "\0" in value for value in body.values())):
                 raise ValueError("invalid-pairing-request")
-            from wireless_pairing import endpoint, pair_device, verify_device, relocate_device, PairingSocket
+            from wireless_pairing import endpoint, pair_device, inspect_pairing, RepairRequired, verify_device, relocate_device, PairingSocket
             address = endpoint(body["address"])
             previous = endpoint(body["previous"]) if action == "relocate-wireless" else None
             code = body.get("code", "")
@@ -111,6 +111,10 @@ class Backend:
                             wire.close()
                             raise ConnectionError("cancelled")
                         return wire
+                    if action == "inspect-wireless":
+                        pairing_state = inspect_pairing(address, socket_factory=connect)
+                        self.events.put(dict(kind="pairing", ok=True, command=action, port=address, pairingState=pairing_state))
+                        return
                     if action == "pair":
                         pair_device(address, code, socket_factory=connect)
                     elif action == "re-pair":
@@ -124,11 +128,15 @@ class Backend:
                         verify_device(address, socket_factory=connect)
                     self.events.put(dict(kind="pairing", ok=True, command=action,
                                          port=address_found if action in ("find-wireless", "relocate-wireless") else address))
+                except RepairRequired:
+                    self.events.put(dict(kind="pairing", ok=False, command=action, port=address,
+                                         pairingState="repair-required", error="设备已有绑定，本机没有对应凭据。请点击重新配对，并使用屏幕上的新码确认。"))
                 except Exception:
                     #  网络异常可能包含对端内容，不把原始异常或配对码写入操作记录 / Network errors may contain peer data; never log raw exceptions or pairing codes
-                    self.events.put(dict(kind="pairing", ok=False, command=action,
+                    self.events.put(dict(kind="pairing", ok=False, command=action, port=address,
                         error=("重新配对未确认完成：需升级配套固件与语音模型。请唤醒设备后说“开启配对模式”，用屏幕当前地址和新码重试；码有效5分钟，最多5次。若提交后断开，请先验证连接恢复；不要删除原记录。"
-                               if action == "re-pair" else "未能在当前网络验证原设备。原配对记录已保留；请确认设备在线、没有其他电脑占用连接、网络未开启客户端隔离，再重试或手动更新地址。"
+                               if action == "re-pair" else "无法检测设备配对状态：请确认 IP、局域网互通及设备在线，并退出其他电脑的 Omi。检测失败不代表设备未绑定。"
+                               if action == "inspect-wireless" else "未能在当前网络验证原设备。原配对记录已保留；请确认设备在线、没有其他电脑占用连接、网络未开启客户端隔离，再重试或手动更新地址。"
                                if action in ("find-wireless", "relocate-wireless") else
                                "无线验证未完成：已配对设备换网后，请点击重新查找设备；首次配对请核对地址和六位码。")))
                 finally:
@@ -183,7 +191,7 @@ class Backend:
                     or not isinstance(message["action"], str)):
                 raise ValueError("invalid-request")
             action, body = message["action"], message["body"]
-            if action not in ("connect", "connect-wireless", "light", "monitor-profile", "pair", "re-pair", "verify-wireless", "find-wireless", "relocate-wireless", "monitor-setup-install") and body is not None:
+            if action not in ("connect", "connect-wireless", "light", "monitor-profile", "pair", "re-pair", "inspect-wireless", "verify-wireless", "find-wireless", "relocate-wireless", "monitor-setup-install") and body is not None:
                 raise ValueError("unexpected-body")
             result = dict(ok=True, result=self.dispatch(action, body))
         except Exception as error:

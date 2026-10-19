@@ -45,17 +45,23 @@ export function Desktop({ device, appearance: { dark, theme, preference, setPref
   const [light, setLight] = useState<LightDraft>({ color: '#FFFFFF', brightness: 16, effect: 'rainbow' });
   const heading = pages.find(item => item.id === page)!;
   const active = device.ready && device.connected && !device.busy;
+  const connectionMode = device.snapshot.monitorRequested
+    ? device.snapshot.state?.monitorOutput === 'connected' ? 'Codex 监控' : '监控待恢复'
+    : device.snapshot.state?.mode === 'local' ? '本地模式' : '等待设备状态';
   return <FluentProvider theme={theme} className="app-provider" style={{ colorScheme: dark ? 'dark' : 'light' }}>
     <div className="shell" data-theme={dark ? 'dark' : 'light'} style={{ '--sidebar-width': `${sidebarWidth}px` } as CSSProperties}>
       <aside className="sidebar">
-        <div className="brand"><img className="brand-icon" src={appIcon} alt="" /><div><strong>Omi</strong><small>设备控制中心</small></div></div>
-        <span className="nav-label">工作空间</span>
-        <nav aria-label="主导航">{pages.map((item, index) => <Button key={item.id} appearance="subtle" icon={item.icon}
-          className={`nav ${page === item.id ? 'selected' : ''} ${index === 3 ? 'nav-divider' : ''}`}
-          onClick={() => setPage(item.id)} aria-current={page === item.id ? 'page' : undefined}>{item.title}</Button>)}</nav>
-        <div className="sidebar-bottom"><span className="pilot-label">OMI DESKTOP · 0.2</span>
-          <strong><i className={device.connected ? 'connection-dot online' : 'connection-dot'} />{device.connected ? '设备已连接' : '等待设备连接'}</strong>
-          <small>{device.demo ? '演示模式 · 模拟设备' : 'USB / Wi-Fi'}</small></div>
+        <div className="brand"><img className="brand-icon" src={appIcon} alt="" /><div><strong>Omi</strong><small>你的桌面伙伴</small></div></div>
+        <nav aria-label="主导航">{[{ title: '设备控制', items: pages.slice(0, 3) }, { title: '设备管理', items: pages.slice(3, 5) }].map(group =>
+          <div className="nav-group" key={group.title}><span className="nav-label">{group.title}</span>{group.items.map(item =>
+            <Button key={item.id} appearance="subtle" icon={item.icon} className={`nav ${page === item.id ? 'selected' : ''}`}
+              onClick={() => setPage(item.id)} aria-current={page === item.id ? 'page' : undefined}>{item.title}</Button>)}</div>)}</nav>
+        <div className="sidebar-bottom"><Button appearance="subtle" icon={<Settings20Regular />} className={`nav ${page === 'settings' ? 'selected' : ''}`}
+          onClick={() => setPage('settings')} aria-current={page === 'settings' ? 'page' : undefined}>设置</Button>
+          <section className="sidebar-device" aria-label="当前设备连接"><span className="sidebar-device-icon"><PlugConnected20Regular /></span><div>
+            <strong><i className={device.connected ? 'connection-dot online' : 'connection-dot'} />{device.demo ? '模拟设备' : device.connected ? 'Omi 已连接' : '等待设备连接'}</strong>
+            <small>{device.connected ? `${device.demo ? '演示模式' : device.transport === 'wifi' ? 'Wi-Fi' : 'USB'} · ${connectionMode}` : 'USB / Wi-Fi'}</small>
+          </div></section><span className="pilot-label">OMI DESKTOP · 0.2</span></div>
       </aside>
       <SidebarResize width={sidebarWidth} change={setSidebarWidth} />
       <div className="workspace">

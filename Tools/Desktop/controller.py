@@ -132,7 +132,11 @@ class ControlSession:
             self.local()
 
     def snapshot(self):
+        source = "inactive" if not self.monitor_requested else "valid" if (
+            self.state and self.state.get("leaseActive") and self.state.get("displayStatus") != "unknown") else "unavailable"
         return dict(state=copy.deepcopy(self.state), monitorRequested=self.monitor_requested,
+                    monitorSource=dict(state=source, reasons=sorted(self.bridge.unknown_reasons) if self.bridge else []),
+                    taskScreenSupported=bool(self.client.host and getattr(self.client.host, "task_cards", False)),
                     monitorLights=self.monitor_lights,
                     monitorGreenOff=self.monitor_green_off,
                     operations=sorted(self.operations), monitorProfile=copy.deepcopy(self.monitor_profile), lastLight=copy.deepcopy(self.last_light),

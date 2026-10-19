@@ -7,6 +7,8 @@ import type { ThemePreference } from './theme';
 import { ThemePicker } from './ThemePicker';
 import { MonitorSetup } from './MonitorSetup';
 import { WindowSettings } from './WindowSettings';
+import { pairingStatusText } from './backend';
+import { ConnectionCheck } from './ConnectionCheck';
 
 export function Pairing({ device, navigate }: { device: Device; navigate: (page: string) => void }) {
   const [address, setAddress] = useState('');
@@ -14,9 +16,21 @@ export function Pairing({ device, navigate }: { device: Device; navigate: (page:
   const [rePair, setRePair] = useState(false);
   const [editing, setEditing] = useState('');
   const [newAddress, setNewAddress] = useState('');
+  const [inspectionTarget, setInspectionTarget] = useState('');
   const [saved, setSaved] = useState<{ address: string; confirmed: boolean; pendingRepair?: boolean }[]>([]);
   const { ready, busy, connected, request } = device;
   const canConfigure = ready && !connected && !busy;
+  let target = '';
+  try {
+    const url = new URL(address.includes('://') ? address : `wss://${address}`);
+    target = `wss://${url.hostname}:${url.port || '8443'}/pair`;
+  } catch {}
+  const inspection = inspectionTarget === target && device.pairingInspection?.address === target ? device.pairingInspection : undefined;
+  const needsRepair = inspection && ['repair-required', 'identity-changed'].includes(inspection.state);
+  const canPair = rePair || inspection?.state === 'new';
+  function inspect() {
+    if (canConfigure && address.trim()) { setInspectionTarget(target); void device.send('inspect-wireless', { address: address.trim() }); }
+  }
   useEffect(() => {
     if (!ready || busy) return;
     let cancelled = false;
@@ -52,9 +66,16 @@ export function Pairing({ device, navigate }: { device: Device; navigate: (page:
       <p className="module-note">换 Wi-Fi 或连接失败时，重新查找设备，最多约一分钟。</p>
     </Card><Card title={rePair ? '重新配对' : '配对新设备'} caption="唤醒设备后说“开启配对模式”，输入屏幕上的 IP 和六位码。">
       {rePair && <p className="pairing-warning" role="alert">重新配对成功后，旧电脑的配对凭据将失效。仅在换电脑或凭据丢失时使用。</p>}
-      <div className="form-stack"><Field label="设备地址"><Input placeholder="例如 192.168.1.20" value={address} disabled={!canConfigure} onChange={(_, data) => setAddress(data.value)} /></Field>
+      <div className="form-stack"><Field label="设备地址"><Input placeholder="例如 192.168.1.20" value={address} disabled={!canConfigure}
+        onBlur={() => { if (!rePair && !inspection) inspect(); }} onChange={(_, data) => { setAddress(data.value); setCode(''); setInspectionTarget(''); }} /></Field>
+        <Button disabled={!canConfigure || device.demo || !address.trim()} onClick={inspect}>检测配对状态</Button>
+        {inspection && <div aria-live="polite"><p>{pairingStatusText[inspection.state] ?? pairingStatusText.unknown}</p>
+          {needsRepair && !rePair && <Button disabled={!canConfigure} onClick={() => { setRePair(true); setCode(''); }}>重新配对该设备</Button>}
+          {inspection.state === 'pending' && <Button disabled={!canConfigure} onClick={() => void device.send('verify-wireless', { address: target })}>恢复配对确认</Button>}
+          {inspection.state === 'paired-here' && <Button disabled={!canConfigure} onClick={() => { void device.send('connect-wireless', { ...device.settings, port: target }); navigate('overview'); }}>无线连接此设备</Button>}
+        </div>}
         <Field label="六位配对码"><Input type="password" value={code} disabled={!canConfigure} autoComplete="off" input={{ inputMode: 'numeric', maxLength: 6 }} onChange={(_, data) => setCode(data.value.replace(/\D/g, '').slice(0, 6))} /></Field>
-        <Button appearance="primary" disabled={!canConfigure || device.demo || !address.trim() || code.length !== 6}
+        <Button appearance="primary" disabled={!canConfigure || device.demo || !canPair || !address.trim() || code.length !== 6}
           onClick={() => { void device.send(rePair ? 're-pair' : 'pair', { address: address.trim(), code }); setCode(''); }}>{rePair ? '确认重新配对' : '配对'}</Button></div>
       <p className="module-note">配对码 5 分钟有效，最多尝试 5 次。</p>
       <details className="pairing-details"><summary>配对帮助</summary>
@@ -69,7 +90,7 @@ export function Pairing({ device, navigate }: { device: Device; navigate: (page:
 export function Diagnostics({ device }: { device: Device }) {
   const diagnostic = device.snapshot.diagnostics ?? {};
   const health = device.snapshot.health ?? {};
-  return <div className="detail-stack"><Card title="通信与设备健康" caption="本次连接内的汇总，不保存原始会话内容">
+  return <div className="detail-stack"><ConnectionCheck device={device} /><Card title="通信与设备健康" caption="本次连接内的汇总，不保存原始会话内容">
     <dl className="diagnostic-grid">{[['通信超时', diagnostic.replyTimeouts ?? 0], ['解码错误', diagnostic.decodeIssues ?? 0],
       ['最长往返', `${Math.round(diagnostic.maxRoundTripMs ?? 0)} ms`], ['麦克风', health.microphoneOk ? '已观测正常' : '未观测'],
       ['音频队列异常', health.audioQueueProblem ? '有记录' : '未观测'], ['看门狗 / 崩溃', health.watchdogOrPanic ? '有记录' : '未观测']].map(([name, value]) => <div key={String(name)}><dt>{name}</dt><dd>{String(value)}</dd></div>)}</dl>

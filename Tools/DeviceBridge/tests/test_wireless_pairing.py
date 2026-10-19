@@ -12,7 +12,7 @@ import threading
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pake import Pake
 from pairing_auth import derive_daily_key
-from wireless_pairing import PairingSocket, PairingStore, BoundedFrames, b64, unb64, confirmation, transcript, pair_device, verify_device, relocate_device, endpoint
+from wireless_pairing import PairingSocket, PairingStore, BoundedFrames, b64, unb64, confirmation, transcript, pair_device, inspect_pairing, RepairRequired, verify_device, relocate_device, endpoint
 
 
 class Device:
@@ -92,6 +92,30 @@ class WirelessPairingTests(unittest.TestCase):
 
     def pair(self, code="123456"):
         pair_device(self.address, code, store=self.store, socket_factory=self.device.connect)
+
+    def test_inspection_distinguishes_new_local_other_computer_and_changed_identity_without_writes(self):
+        inspect = lambda store: inspect_pairing(self.address, store=store, socket_factory=self.device.connect)
+        self.assertEqual(inspect(self.store), 'new')
+        self.assertEqual(self.store.devices(), [])
+        self.assertIsNone(self.device.key)
+        self.pair()
+        original = self.store.load(self.address)
+        self.assertEqual(inspect(self.store), 'paired-here')
+        other = PairingStore(Path(self.directory.name) / 'other.sqlite3')
+        self.assertEqual(inspect(other), 'repair-required')
+        with self.assertRaises(RepairRequired):
+            pair_device(self.address, '123456', store=other, socket_factory=self.device.connect)
+        self.assertEqual(other.devices(), [])
+        self.device.observed_pin = hashlib.sha256(b'different synthetic device').digest()
+        self.assertEqual(inspect(self.store), 'identity-changed')
+        self.assertEqual(self.store.load(self.address), original)
+
+    def test_inspection_preserves_pending_confirmation(self):
+        self.device.drop_commit = True
+        with self.assertRaises(TimeoutError): self.pair()
+        pending = self.store.load(self.address)
+        self.assertEqual(inspect_pairing(self.address, store=self.store, socket_factory=self.device.connect), 'pending')
+        self.assertEqual(self.store.load(self.address), pending)
 
     def test_paired_and_authenticated_after_new_store_instance(self):
         self.pair()

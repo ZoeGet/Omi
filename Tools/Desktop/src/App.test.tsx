@@ -32,7 +32,9 @@ beforeEach(() => {
     result: message.action === 'init' ? { demo: false, root: 'C:/state', bindings: 'C:/binding.json', ports: [{ device: 'COM17', description: 'OmiPet' }] }
       : message.action === 'monitor-setup-status' ? { state: 'not-installed', message: '尚未配置 Codex 监控', packaged: true, candidates: ['C:/Codex.exe'], home: 'C:/codex', root: 'C:/state' }
       : message.action === 'paired-devices' ? [] : null,
-    events: bridge.events.splice(0) }));
+    events: message.action === 'inspect-wireless'
+      ? [{ kind: 'pairing', command: 'inspect-wireless', ok: true, port: `wss://${message.body.address}:8443/pair`, pairingState: 'new' }, ...bridge.events.splice(0)]
+      : bridge.events.splice(0) }));
 });
 
 describe('USB desktop', () => {
@@ -74,7 +76,7 @@ describe('USB desktop', () => {
     bridge.invoke.mockClear();
     render(<App />);
     await waitFor(() => expect((screen.getByRole('tab', { name: 'USB' }) as HTMLButtonElement).disabled).toBe(false));
-    expect(bridge.invoke.mock.calls.some(([, args]) => args.message.action === 'monitor-setup-status')).toBe(false);
+    expect(bridge.invoke.mock.calls.filter(([, args]) => args.message.action === 'monitor-setup-status')).toHaveLength(1);
     expect(screen.queryByRole('heading', { name: '配置 Codex 监控' })).toBeNull();
   });
 

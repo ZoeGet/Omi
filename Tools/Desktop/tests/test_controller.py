@@ -14,6 +14,16 @@ def setting(**changes):
 
 
 class ControllerTests(unittest.TestCase):
+    def test_self_check_tracks_current_source_and_never_exports_session_details(self):
+        self.assertEqual(self.control.snapshot()['monitorSource']['state'], 'inactive')
+        self.control.monitor()
+        snapshot = self.control.snapshot()
+        self.assertEqual(snapshot['monitorSource']['state'], 'valid')
+        self.assertTrue(snapshot['taskScreenSupported'])
+        self.control.state = None
+        self.assertEqual(self.control.snapshot()['monitorSource']['state'], 'unavailable')
+        self.assertEqual(set(snapshot['monitorSource']), {'state', 'reasons'})
+
     def setUp(self):
         self.client = SimulatedClient()
         self.control = ControlSession(self.client, demo_reader)

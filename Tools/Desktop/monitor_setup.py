@@ -278,7 +278,7 @@ class MonitorSetup:
                     + (" 部分运行时文件被占用或已修改，已保留。" if retained else ""))
 
     def status(self):
-        result = dict(state="not-installed", message="尚未配置 Codex 监控", packaged=self.runtime is not None,
+        result = dict(state="not-installed", installed=False, hookReceived=False, message="尚未配置 Codex 监控", packaged=self.runtime is not None,
                       home=str(self.home), root=str(self.root), candidates=[])
         try:
             result["candidates"] = codex_images()
@@ -298,9 +298,11 @@ class MonitorSetup:
                 path = destination / name
                 if not path.resolve().is_relative_to(expected) or not path.is_file() or digest(path) != sha:
                     return dict(result, state="repair", message="监控组件缺失或损坏，请修复安装。")
+            result["installed"] = True
             marker = read_json(self.root / "hook-receipt.json", {})
             if marker.get("installationId") != receipt["installationId"]:
                 return dict(result, state="awaiting-event", message="已配置，等待信任和新事件；安装成功不代表 Hook 已受信任。")
+            result["hookReceived"] = True
             view = LifecycleReader(self.root, self.root / "host-bindings.json", max_age_seconds=30)()
             if any(e.get("sessionId") == marker.get("sessionId") and e.get("hostProcessState") == "running"
                    and e.get("reason") == "observed-lifecycle" for e in view["sessions"]):

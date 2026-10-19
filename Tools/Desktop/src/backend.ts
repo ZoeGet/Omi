@@ -7,6 +7,7 @@ export type Settings = { port: string; root: string; bindings: string };
 export type MonitorProfile = { revision: number; profiles: Record<string, Light> };
 type RequestBody = Settings | Light | MonitorProfile | { address: string; code?: string; previous?: string } | { images: string[] } | null;
 export type Snapshot = {
+  monitorSource?: { state: string; reasons: string[] }; taskScreenSupported?: boolean;
   state: { mode: string; displayStatus: string; monitorOutput?: string; leaseActive: boolean } | null;
   monitorRequested: boolean; monitorLights: boolean; monitorGreenOff: boolean; operations: string[];
   monitorProfile?: MonitorProfile | null;
@@ -16,12 +17,22 @@ export type WorkerEvent = Partial<Snapshot> & {
   kind: string; port?: string; ok?: boolean; command?: string; error?: string;
   releaseConfirmed?: boolean; monitorOff?: boolean;
   transport?: 'usb' | 'wifi';
+  pairingState?: string;
 };
 type Reply = { ok: boolean; result?: unknown; error?: string; events: WorkerEvent[] };
 type State = {
   ready: boolean; connected: boolean; busy: boolean; demo: boolean;
   ports: Port[]; settings: Settings; snapshot: Partial<Snapshot>; notice: string; logs: string[];
   transport?: 'usb' | 'wifi'; endpoint?: string;
+  pairingInspection?: { address: string; state: string };
+};
+export const pairingStatusText: Record<string, string> = {
+  new: '设备报告尚未绑定，可输入屏幕上的六位码完成首次配对。',
+  'paired-here': '已验证本机配对凭据，可直接无线连接，无需再次输入配对码。',
+  pending: '本机有待确认的配对记录，请先验证连接恢复，不要重复配对。',
+  'repair-required': '设备已有绑定或绑定状态发生变化，本机没有有效凭据。请明确选择重新配对。',
+  'identity-changed': '此地址的设备身份与本机记录不同。请核对设备和 IP，不能直接覆盖原绑定。',
+  unknown: '尚未确认设备配对状态，请检查地址、网络或其他电脑是否占用连接后重新检测。',
 };
 const errors: Record<string, string> = {
   'monitor-profile-not-supported': '当前固件不支持保存监控灯效，请升级固件。',
@@ -68,8 +79,14 @@ export function applyEvents(state: State, events: WorkerEvent[]): State {
         state = log({ ...state, busy: false }, event.ok ? commands[event.command!] : errorText(event.error!));
         break;
       case 'pairing':
+        if (event.command === 'inspect-wireless' || event.pairingState) {
+          state = { ...state, pairingInspection: { address: event.port ?? '', state: event.pairingState ?? 'unknown' } };
+        } else if (event.ok && ['pair', 're-pair', 'verify-wireless'].includes(event.command!)) {
+          state = { ...state, pairingInspection: undefined };
+        }
         state = log({ ...state, busy: false }, event.ok
-          ? event.command === 'pair' ? '无线配对已保存。'
+          ? event.command === 'inspect-wireless' ? pairingStatusText[event.pairingState ?? 'unknown'] ?? pairingStatusText.unknown
+            : event.command === 'pair' ? '无线配对已保存。'
             : event.command === 're-pair' ? '重新配对成功，旧配对凭据已失效。'
             : ['find-wireless', 'relocate-wireless'].includes(event.command!) ? `已验证原设备并保存当前地址：${event.port}，无需重新配对。` : '无线设备身份验证通过。'
           : event.error!);
@@ -133,7 +150,7 @@ export function useDevice() {
 
   async function send(action: string, body: RequestBody = null) {
     if (!state.ready || state.busy) return;
-    setState(value => ({ ...value, busy: true }));
+    setState(value => ({ ...value, busy: true, pairingInspection: action === 'inspect-wireless' ? undefined : value.pairingInspection }));
     try { await request(action, body); }
     catch (error) { setState(value => log({ ...value, busy: false, ready: false, snapshot: {} }, String(error))); }
   }

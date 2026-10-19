@@ -14,6 +14,28 @@ spec.loader.exec_module(module)
 
 
 class BackendTests(unittest.TestCase):
+    def test_pairing_inspection_is_read_only_explicit_and_reports_safe_state(self):
+        self.backend.demo = False
+        with patch('wireless_pairing.inspect_pairing', return_value='repair-required') as inspect:
+            self.assertTrue(self.request('inspect-wireless', dict(address='192.0.2.1'))['ok'])
+            event = self.wait_for('pairing')
+            self.assertEqual(event['pairingState'], 'repair-required')
+            self.assertEqual(event['port'], 'wss://192.0.2.1:8443/pair')
+            inspect.assert_called_once()
+        self.backend.connected = True
+        self.assertFalse(self.request('inspect-wireless', dict(address='192.0.2.1'))['ok'])
+
+    def test_existing_binding_is_reported_without_raw_error_or_automatic_repair(self):
+        from wireless_pairing import RepairRequired
+        self.backend.demo = False
+        with patch('wireless_pairing.pair_device', side_effect=RepairRequired('private 123456')) as pair:
+            self.assertTrue(self.request('pair', dict(address='192.0.2.1', code='123456'))['ok'])
+            event = self.wait_for('pairing')
+            self.assertEqual(event['pairingState'], 'repair-required')
+            self.assertFalse(event['ok'])
+            self.assertNotIn('123456', json.dumps(event))
+            self.assertNotIn('replace', pair.call_args.kwargs)
+
     def test_setup_is_explicit_and_never_mutates_in_demo_or_connected_mode(self):
         with patch('monitor_setup.MonitorSetup') as setup:
             setup.return_value.status.return_value = dict(state='not-installed')

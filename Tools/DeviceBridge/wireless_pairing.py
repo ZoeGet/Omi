@@ -228,13 +228,34 @@ class PairingStore:
             db.execute("INSERT OR REPLACE INTO devices VALUES (?, ?, 1)", (address, source[0]))
 
 
+def inspect_pairing(address, *, store=None, socket_factory=PairingSocket):
+    store = store or PairingStore()
+    address = endpoint(address)
+    records = store.authentication_records(address)
+    with socket_factory(address) as wire:
+        if records and all(record[1] != wire.pin for record in records):
+            return "identity-changed"
+        if not wire.ready["paired"]:
+            return "repair-required" if records else "new"
+        if not records:
+            return "repair-required"
+        if any(not record[2] for record in records):
+            return "pending"
+        wire.authenticate(records[0][0])
+        return "paired-here"
+
+
+class RepairRequired(ValueError):
+    pass
+
+
 def pair_device(address, code, *, store=None, socket_factory=PairingSocket, pake_factory=Pake, replace=False):
     store = store or PairingStore()
     existing = None if replace else store.load(address)
     with socket_factory(address, existing[1] if existing and not replace else None) as wire:
         if wire.ready["paired"] and not replace:
             if not existing:
-                raise ValueError("设备已配对，本机没有对应凭据")
+                raise RepairRequired("设备已有绑定，本机没有对应凭据；请明确选择重新配对。")
             wire.authenticate(existing[0])
             store.confirm(address, existing[0], existing[1])
             return

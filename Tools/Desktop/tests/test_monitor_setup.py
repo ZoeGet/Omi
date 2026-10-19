@@ -180,10 +180,13 @@ class SetupTests(unittest.TestCase):
         marker = self.setup.root / "hook-receipt.json"
         marker.write_text(json.dumps(dict(installationId="old")), encoding="utf-8")
         self.assertEqual(self.setup.status()["state"], "awaiting-event")
+        self.assertTrue(self.setup.status()['installed'])
+        self.assertFalse(self.setup.status()['hookReceived'])
         marker.write_text(json.dumps(dict(installationId=self.setup.owned()["installationId"], sessionId='current')), encoding="utf-8")
         with patch("monitor_setup.LifecycleReader") as reader:
             reader.return_value.return_value = dict(sessions=[])
             self.assertEqual(self.setup.status()["state"], "awaiting-binding")
+            self.assertTrue(self.setup.status()['hookReceived'])
             reader.return_value.return_value = dict(sessions=[dict(sessionId='other', hostProcessState="running", reason="observed-lifecycle")])
             self.assertEqual(self.setup.status()["state"], "awaiting-binding")
             reader.return_value.return_value = dict(sessions=[dict(sessionId='current', hostProcessState="running", reason="observed-lifecycle")])

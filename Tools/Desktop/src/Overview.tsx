@@ -4,6 +4,7 @@ import { ArrowRight20Regular, ArrowSync20Regular } from '@fluentui/react-icons';
 import { Card, LightStrip, effectLabels, type Device } from './Surface';
 import { lightColor, lightDescription } from './MonitorLights';
 import type { LightDraft } from './LocalLights';
+import { ConnectionCheck } from './ConnectionCheck';
 
 export function Overview({ device, light, navigate }: { device: Device; light: LightDraft; navigate: (page: string) => void }) {
   const { connected, busy, snapshot, settings } = device;
@@ -101,6 +102,7 @@ export function Overview({ device, light, navigate }: { device: Device; light: L
       <div className="preview-caption"><span className="muted">{monitoring ? display.note : `${effectLabels[light.effect]} · ${light.effect === 'rainbow' ? '独立彩虹色谱' : light.color} · 亮度 ${Math.round(light.brightness / 255 * 100)}%`}</span>
         <Button appearance="subtle" icon={<ArrowRight20Regular />} iconPosition="after" onClick={() => navigate('lights')}>调整灯光</Button></div>
     </Card>
+    <ConnectionCheck device={device} navigate={navigate} />
     <section className="metrics" aria-label="连接摘要">{[['连接方式', device.demo ? '模拟设备' : !connected ? '未连接' : device.transport === 'wifi' ? 'Wi-Fi' : 'USB'], ['通信超时', `${snapshot.diagnostics?.replyTimeouts ?? 0} 次`],
       ['当前模式', !connected ? '等待连接' : !confirmed ? '待确认' : monitoring ? 'Codex 监控' : '本地灯光'],
       ['输出状态', monitorConnected ? '监控输出' : connected ? '本地控制' : '连接未建立']].map(([key, value]) => <div key={key}><small>{key}</small><strong>{value}</strong></div>)}</section>
