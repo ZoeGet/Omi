@@ -53,7 +53,7 @@ export function MonitorLights({ profile, enabled, connected, supported, demo, sa
       }} /></SettingRow>
       <SettingRow title="亮度" description={`${light.brightness}/255 · ${Math.round(light.brightness / 255 * 100)}%`}><Slider aria-label={`${title}亮度`} min={0} max={255} value={light.brightness} disabled={!editable} onChange={(_, data) => update({ brightness: data.value })} /></SettingRow>
       <SettingRow title="灯效"><EffectPicker value={light.effect} disabled={!editable} onChange={effect => update({ effect })} /></SettingRow>
-      <LightStrip color={lightColor(light)} off={light.effect === 'off' || light.brightness === 0} /><p className="module-note">编辑预览，不代表设备当前输出。{light.effect === 'rainbow' ? '彩虹使用独立色谱。' : ''}</p>
+      <LightStrip color={lightColor(light)} effect={light.effect} brightness={light.brightness} /><p className="module-note">动画模拟编辑值，不代表设备当前输出。{light.effect === 'rainbow' ? '彩虹使用独立色谱。' : ''}</p>
     </Card></div> : <div className="empty-state monitor-empty"><h2>{connected ? '等待监控灯效配置' : '连接设备后设置灯效'}</h2><p>五种状态可独立编辑，保存后重启仍保留。</p></div>}
     <section className="apply-row"><div><strong>{dirty ? '保存全部五种状态' : '配置保存在设备中'}</strong><p>收到设备保存确认后生效。保存不会自动开启监控。</p></div><div className="button-row">
       <Button icon={<ArrowSync20Regular />} disabled={!enabled || !profile} onClick={() => { setDraft(JSON.parse(serialized)); read(); }}>重新读取设备配置</Button>

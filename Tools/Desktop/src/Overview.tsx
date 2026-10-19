@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Button, Select, Switch, Tab, TabList } from '@fluentui/react-components';
 import { ArrowRight20Regular, ArrowSync20Regular } from '@fluentui/react-icons';
-import { Card, LightStrip, type Device } from './Surface';
+import { Card, LightStrip, effectLabels, type Device } from './Surface';
 import { lightColor, lightDescription } from './MonitorLights';
 import type { LightDraft } from './LocalLights';
 
@@ -94,8 +94,11 @@ export function Overview({ device, light, navigate }: { device: Device; light: L
       <div className="legend">{(['idle', 'working', 'waitingApproval'] as const).map(key => <span key={key}><i style={{ backgroundColor: saved?.[key] ? lightColor(saved[key]) : defaults[key].color }} />{defaults[key].title}</span>)}</div>
     </Card>
     <Card title="灯光预览" caption="编辑值，不是设备实时灯光读回" className="preview-module">
-      <LightStrip color={monitoring ? display.color : light.color} off={!connected || !confirmed || monitoring && (!monitorConnected || saved?.[confirmed?.displayStatus ?? 'unknown']?.effect === 'off' || saved?.[confirmed?.displayStatus ?? 'unknown']?.brightness === 0) || !monitoring && (light.effect === 'off' || light.brightness === 0)} />
-      <div className="preview-caption"><span className="muted">{monitoring ? display.note : `${light.color} · 亮度 ${Math.round(light.brightness / 255 * 100)}%`}</span>
+      <LightStrip color={monitoring ? display.color : light.color}
+        effect={monitoring ? saved?.[confirmed?.displayStatus ?? 'unknown']?.effect ?? 'centerExpand' : light.effect}
+        brightness={monitoring ? saved?.[confirmed?.displayStatus ?? 'unknown']?.brightness ?? 16 : light.brightness}
+        off={!connected || !confirmed || monitoring && !monitorConnected} />
+      <div className="preview-caption"><span className="muted">{monitoring ? display.note : `${effectLabels[light.effect]} · ${light.effect === 'rainbow' ? '独立彩虹色谱' : light.color} · 亮度 ${Math.round(light.brightness / 255 * 100)}%`}</span>
         <Button appearance="subtle" icon={<ArrowRight20Regular />} iconPosition="after" onClick={() => navigate('lights')}>调整灯光</Button></div>
     </Card>
     <section className="metrics" aria-label="连接摘要">{[['连接方式', device.demo ? '模拟设备' : !connected ? '未连接' : device.transport === 'wifi' ? 'Wi-Fi' : 'USB'], ['通信超时', `${snapshot.diagnostics?.replyTimeouts ?? 0} 次`],

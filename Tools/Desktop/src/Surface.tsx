@@ -1,6 +1,7 @@
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Button } from '@fluentui/react-components';
 import type { useDevice } from './backend';
+import { animatedLight, previewPixel } from './lightPreview';
 
 export type Device = ReturnType<typeof useDevice>;
 
@@ -13,10 +14,48 @@ export function Card({ title, caption, children, className = '' }: {
   </section>;
 }
 
-export function LightStrip({ color, off = false }: { color: string; off?: boolean }) {
-  return <div className="light-strip" aria-label={off ? '灯带预览：关闭' : `灯带预览：${color}`}>
-    {Array.from({ length: 13 }, (_, index) => <span key={index}
-      style={{ backgroundColor: off ? 'var(--led-off)' : color, boxShadow: off ? 'none' : `0 0 12px ${color}44` }} />)}
+export function LightStrip({ color, off = false, effect = 'solid', brightness = 255 }: {
+  color: string; off?: boolean; effect?: string; brightness?: number;
+}) {
+  const [elapsed, setElapsed] = useState(0);
+  const dark = off || effect === 'off' || brightness === 0;
+  useEffect(() => {
+    setElapsed(0);
+    if (dark || !animatedLight(effect)) return;
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let frame = 0;
+    let start: number | undefined;
+    let last = -Infinity;
+    const tick = (now: number) => {
+      start ??= now;
+      if (now - last >= 32) { setElapsed(now - start); last = now; }
+      frame = requestAnimationFrame(tick);
+    };
+    const restart = () => {
+      cancelAnimationFrame(frame);
+      start = undefined;
+      last = -Infinity;
+      setElapsed(0);
+      if (!reduced.matches && !document.hidden) frame = requestAnimationFrame(tick);
+    };
+    restart();
+    reduced.addEventListener('change', restart);
+    document.addEventListener('visibilitychange', restart);
+    return () => {
+      cancelAnimationFrame(frame);
+      reduced.removeEventListener('change', restart);
+      document.removeEventListener('visibilitychange', restart);
+    };
+  }, [effect, dark]);
+  return <div className="light-strip" aria-label={dark ? '灯带预览：关闭' : `灯带预览：${effect === 'rainbow' ? '彩虹' : color}`} data-effect={effect}>
+    {Array.from({ length: 13 }, (_, index) => {
+      const pixel = previewPixel(effect, index, elapsed);
+      const pixelColor = effect === 'rainbow' ? `hsl(${pixel.hue} 100% 50%)` : color;
+      //  屏幕预览保留可见底光，低设备亮度不直接等于低透明度 / Keep a visible preview floor instead of mapping low device brightness directly to opacity
+      const level = (0.3 + 0.7 * pixel.level) * (0.65 + 0.35 * Math.sqrt(Math.max(0, Math.min(255, brightness)) / 255));
+      return <span key={index} style={{ backgroundColor: dark ? 'var(--led-off)' : pixelColor,
+        opacity: dark ? 1 : level, boxShadow: dark ? 'none' : `0 0 12px ${pixelColor}` }} />;
+    })}
   </div>;
 }
 

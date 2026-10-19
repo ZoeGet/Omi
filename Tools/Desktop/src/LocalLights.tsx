@@ -24,7 +24,7 @@ export function LocalLights({ device, draft, change }: { device: Device; draft: 
       <div className="field-title"><strong>灯效</strong></div><EffectPicker value={draft.effect} disabled={!editable} onChange={effect => change({ ...draft, effect })} />
       <p className="module-note">彩虹使用独立色谱；关闭灯光保留编辑参数。</p>
     </Card>
-    <Card title="灯光预览" caption="仅预览编辑值，不模拟动态灯效"><LightStrip color={draft.color} off={draft.effect === 'off' || draft.brightness === 0} /><p className="muted">{draft.color} · 亮度 {percent}%</p></Card>
+    <Card title="灯光预览" caption="模拟编辑值的颜色、亮度与动画，不是设备实时读回"><LightStrip color={draft.color} effect={draft.effect} brightness={draft.brightness} /><p className="muted">{draft.effect === 'rainbow' ? '独立彩虹色谱' : draft.color} · 亮度 {percent}%</p></Card>
     <Card title="监控灯光规则"><ul className="rules">{monitorStates.map(([key, title]) => <li key={key}><i style={{ backgroundColor: snapshot.monitorProfile?.profiles[key] ? lightColor(snapshot.monitorProfile.profiles[key]) : 'var(--muted)' }} /><span>{title}</span>
       <strong>{snapshot.monitorProfile?.profiles[key] ? lightDescription(snapshot.monitorProfile.profiles[key]) : key === 'working' ? '红色扩散灯' : key === 'waitingApproval' ? '黄色扩散灯' : '绿色扩散灯'}</strong></li>)}</ul><p className="module-note">来源异常和离线使用设备保存的配置；连接断开则关灯。</p></Card>
     <section className="apply-row"><p>{!connected ? '请先连接设备。' : monitoring ? '监控模式已锁定手动灯光，请先切回本地。' : !editable ? '等待设备就绪或确认灯光能力。' : '收到设备回执后才确认成功。'}</p>
