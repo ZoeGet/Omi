@@ -135,6 +135,8 @@ p { margin: 0; font-size: 13px; line-height: 1.7; }
 .connection-check li { padding: 12px 0; border-bottom: 1px solid var(--line); }
 .connection-check li>div { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; }
 .connection-check li p { color: var(--muted); font-size: 12px; margin-top: 6px; }
+.connection-check-actions { justify-content: flex-end; gap: 10px; padding-top: 18px; }
+.connection-check-actions>button { min-width: 104px; }
 .saved-device { padding: 18px 0; border-bottom: 1px solid var(--line); }
 .saved-device strong { overflow-wrap: anywhere; font-size: 13px; font-weight: 500; }
 .saved-device .button-row { margin-top: 16px; }

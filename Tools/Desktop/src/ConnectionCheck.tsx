@@ -48,7 +48,8 @@ export function ConnectionCheck({ device, navigate }: { device: Device; navigate
   ];
   return <Card title="连接与监控自检" caption={device.demo ? '演示模式不检测本机真实 Hook' : '分别确认连接、组件、事件与当前任务数据'}>
     <ol className="connection-check">{rows.map(([title, state, hint]) => <li key={title}><div><strong>{title}</strong><span>{state}</span></div><p>{hint}</p></li>)}</ol>
-    <div className="button-row"><Button disabled={!device.ready || device.demo || checking || device.busy} onClick={() => void refresh()}>重新自检</Button>
-      {navigate && <Button disabled={device.busy} onClick={() => navigate('settings')}>配置与修复监控</Button>}</div>
+    <div className="button-row connection-check-actions">
+      {navigate && <Button disabled={device.busy} onClick={() => navigate('settings')}>配置与修复监控</Button>}
+      <Button appearance="primary" disabled={!device.ready || device.demo || checking || device.busy} onClick={() => void refresh()}>重新自检</Button></div>
   </Card>;
 }
