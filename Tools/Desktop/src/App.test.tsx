@@ -36,6 +36,18 @@ beforeEach(() => {
 });
 
 describe('USB desktop', () => {
+  it('starts local lighting with rainbow and keeps it after returning from monitoring', async () => {
+    render(<App />);
+    const user = await connect();
+    expect(screen.getByLabelText('灯带预览：彩虹')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: '灯光与灯效' }));
+    expect(screen.getByRole('button', { name: '彩虹' }).getAttribute('aria-pressed')).toBe('true');
+    await user.click(screen.getByRole('button', { name: '设备概览' }));
+    bridge.events.push(monitor());
+    await waitFor(() => expect((screen.getByRole('switch', { name: 'Codex 监控' }) as HTMLInputElement).checked).toBe(true));
+    bridge.events.push(status());
+    await waitFor(() => expect(screen.getByLabelText('灯带预览：彩虹')).toBeTruthy());
+  });
   it('remembers dismissing first-run setup and keeps setup available in settings', async () => {
     const user = userEvent.setup();
     const view = render(<App />);

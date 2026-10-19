@@ -42,7 +42,7 @@ export function Desktop({ device, appearance: { dark, theme, preference, setPref
     }
   }
   const [sidebarWidth, setSidebarWidth] = useState(216);
-  const [light, setLight] = useState<LightDraft>({ color: '#FFFFFF', brightness: 16, effect: 'solid' });
+  const [light, setLight] = useState<LightDraft>({ color: '#FFFFFF', brightness: 16, effect: 'rainbow' });
   const heading = pages.find(item => item.id === page)!;
   const active = device.ready && device.connected && !device.busy;
   return <FluentProvider theme={theme} className="app-provider" style={{ colorScheme: dark ? 'dark' : 'light' }}>
