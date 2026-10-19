@@ -5,10 +5,11 @@ from protocol import (Limits, MAX_SEQUENCE, OPERATIONS, ProtocolError, decode, e
 
 
 class DeviceSimulator:
-    def __init__(self, limits, *, lease_ms, freshness_challenge=False, desktop_control=False, monitor_lights=False, monitor_green_off=False, monitor_profiles=False):
+    def __init__(self, limits, *, lease_ms, freshness_challenge=False, desktop_control=False, monitor_lights=False, monitor_green_off=False, monitor_profiles=False, task_cards=False):
         if type(lease_ms) is not int or lease_ms <= 0:
             raise ProtocolError("explicit-positive-lease-required")
         self.limits = limits
+        self.task_cards = task_cards
         self.lease_ms = lease_ms
         self.freshness_challenge = freshness_challenge
         self.challenge_at = None
@@ -66,6 +67,7 @@ class DeviceSimulator:
             maxSessions=self.limits.max_sessions, leaseMs=self.lease_ms,
             **({"monitorLights": True} if self.monitor_lights else {}),
             **({"monitorGreenOff": True} if self.monitor_green_off else {}),
+            **({"taskCards": True} if self.task_cards else {}),
             **({"freshnessChallenge": True} if self.freshness_challenge else {})))
 
     def disconnect(self):
@@ -203,6 +205,9 @@ class HostSession:
         self.limits = Limits(min(limits.max_json_bytes, body["maxJsonBytes"]),
                              min(limits.max_sessions, body["maxSessions"]))
         self.operations = body["operations"]
+        if 'taskCards' in body and type(body['taskCards']) is not bool:
+            raise ProtocolError('invalid-capabilities')
+        self.task_cards = body.get('taskCards', False)
         if "freshnessChallenge" in body and type(body["freshnessChallenge"]) is not bool:
             raise ProtocolError("invalid-capabilities")
         self.freshness_challenge = body.get("freshnessChallenge", False)

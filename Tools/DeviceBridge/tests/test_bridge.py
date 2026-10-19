@@ -24,6 +24,23 @@ def view(status="working", identity="PRIVATE_SESSION_ID"):
 
 
 class BridgeTests(unittest.TestCase):
+    def test_task_titles_are_rasters_only_and_require_device_capability(self):
+        from task_cards import TaskCards
+        with tempfile.TemporaryDirectory() as directory:
+            index = Path(directory) / 'session_index.jsonl'
+            index.write_text(json.dumps(dict(id='PRIVATE_SESSION_ID', thread_name='PRIVATE_TITLE'))+'\n', encoding='utf-8')
+            for supported in (False, True):
+                source = dict(view(), bindingState='event-correlated', evaluatedAtMonotonicNs=str(time.monotonic_ns()))
+                stream, bridge = self.setup_bridge(lambda: source)
+                stream.device = DeviceSimulator(Limits(4096,16), lease_ms=1000, freshness_challenge=True, task_cards=supported)
+                bridge.allow_fresh_display, bridge.delivery_reserve_seconds = True, 8
+                bridge.task_cards = TaskCards(index, lambda text: bytes([0xA5]*320))
+                self.assertTrue(bridge.step())
+                self.assertEqual('taskCards' in stream.device.snapshot, supported)
+                for text in ('PRIVATE_SESSION_ID','PRIVATE_TITLE','PRIVATE_PROMPT'):
+                    self.assertNotIn(text.encode(), b''.join(stream.writes))
+                    self.assertNotIn(text, json.dumps(bridge.report))
+
     def setup_bridge(self, reader=lambda: view(), *, stream=None, retries=1, reopen=lambda: None):
         stream = stream if stream is not None else Stream()
         clock = lambda: stream.now

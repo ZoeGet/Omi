@@ -143,7 +143,7 @@ class SimulatedClient:
     def __init__(self):
         self.limits = Limits(MAX_JSON_BYTES, MAX_SESSIONS)
         self.device = DeviceSimulator(self.limits, lease_ms=5000,
-                                      freshness_challenge=True, desktop_control=True, monitor_lights=True, monitor_green_off=True, monitor_profiles=True)
+                                      freshness_challenge=True, desktop_control=True, monitor_lights=True, monitor_green_off=True, monitor_profiles=True, task_cards=True)
         self.host = None
         self.round_trips = []
         self.diagnostics = dict(replyTimeouts=0, decodeIssues=0, maxRoundTripMs=0)

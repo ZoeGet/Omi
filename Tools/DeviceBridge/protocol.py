@@ -5,6 +5,7 @@ import math
 import re
 import time
 import uuid
+import base64
 
 
 PREFIX = b"@OMI "
@@ -178,7 +179,7 @@ def validate_monitor_profile(value):
 
 def validate_snapshot(body, limits):
     fields = {"revision", "validForMs", "sourceLiveness", "overallStatus", "sessions"}
-    if (set(body) not in (fields, fields | {"challengeSeq"})
+    if (set(body) - {"challengeSeq", "taskCards"} != fields
             or body["sourceLiveness"] != "unverified"):
         raise ProtocolError("invalid-source-state")
     if "challengeSeq" in body and (type(body["challengeSeq"]) is not int
@@ -208,6 +209,36 @@ def validate_snapshot(body, limits):
             raise ProtocolError("observation-expired")
     if body["overallStatus"] != aggregate(sessions):
         raise ProtocolError("inconsistent-overall-state")
+    if 'taskCards' in body:
+        screen = body['taskCards']
+        active = {s['id'] for s in sessions if s['display'] in ('working', 'waitingApproval')}
+        if (not isinstance(screen, dict) or set(screen) not in ({'active', 'cards'}, {'active', 'cards', 'labels'})
+                or type(screen['active']) is not int or screen['active'] != len(active)
+                or not isinstance(screen['cards'], list) or len(screen['cards']) != min(4, len(active))):
+            raise ProtocolError('invalid-task-cards')
+        if 'labels' in screen:
+            try:
+                labels = base64.b64decode(screen['labels'], validate=True)
+                if len(labels) != 256 or base64.b64encode(labels).decode('ascii') != screen['labels']:
+                    raise ValueError('Invalid labels')
+            except (ValueError, TypeError) as error:
+                raise ProtocolError('invalid-task-labels') from error
+        slots, aliases = set(), set()
+        for card in screen['cards']:
+            if (not isinstance(card, dict) or set(card) != {'slot', 'id', 'bitmap'}
+                    or type(card['slot']) is not int or not 0 <= card['slot'] < 4 or card['slot'] in slots
+                    or not isinstance(card['id'], str)
+                    or card['id'] not in active or card['id'] in aliases
+                    or not isinstance(card['bitmap'], str) or len(card['bitmap']) != 428):
+                raise ProtocolError('invalid-task-card')
+            try:
+                data = base64.b64decode(card['bitmap'], validate=True)
+                if len(data) != 320 or base64.b64encode(data).decode('ascii') != card['bitmap']:
+                    raise ValueError('Invalid raster')
+            except ValueError as error:
+                raise ProtocolError('invalid-task-bitmap') from error
+            slots.add(card['slot'])
+            aliases.add(card['id'])
     return body
 
 

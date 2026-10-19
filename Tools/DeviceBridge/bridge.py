@@ -13,6 +13,7 @@ import time
 
 from protocol import Limits, ProtocolError, SnapshotMapper
 from usb_client import UsbClient
+from task_cards import TaskCards
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "CodexMonitor"))
 from state_view import read_bound_view, read_view
@@ -137,6 +138,7 @@ class Bridge:
         self.allow_fresh_display = allow_fresh_display
         self.delivery_reserve_seconds = delivery_reserve_seconds
         self.mapper = SnapshotMapper()
+        self.task_cards = TaskCards()
         self.previous = None
         self.unknown_reasons = {}
         self.report = dict(observationsOnly=True, physicalLedControl=False,
@@ -159,6 +161,7 @@ class Bridge:
         self.report["capabilities"] = welcome["body"]
         self.report["freshnessChallengeSupported"] = self.client.host.freshness_challenge
         self.mapper = SnapshotMapper()
+        self.task_cards.slots = [None] * 4
         if self.interval * 1000 >= self.client.host.lease_ms:
             raise ValueError("Send interval must be shorter than the negotiated lease")
 
@@ -226,6 +229,8 @@ class Bridge:
                 reasons[problem or display_policy or ("source-" + state if state != "readable"
                                                       else "delivery-budget-exhausted")] += 1
         self.unknown_reasons = dict(reasons)
+        if getattr(self.client.host, 'task_cards', False):
+            body['taskCards'] = self.task_cards.build(body, self.mapper.aliases)
         return body
 
     def step(self):
