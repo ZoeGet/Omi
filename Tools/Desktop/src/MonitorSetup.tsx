@@ -1,16 +1,18 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button, Checkbox, Field, Input } from '@fluentui/react-components';
 import { open } from '@tauri-apps/plugin-dialog';
 import { Card, type Device } from './Surface';
 
 type Setup = { state: string; message: string; packaged: boolean; candidates: string[]; images?: string[]; home: string; root: string };
 
-export function MonitorSetup({ device, completed }: { device: Device; completed?: () => void }) {
+export function MonitorSetup({ device, completed, firstRun = false }: { device: Device; completed?: () => void; firstRun?: boolean }) {
   const [status, setStatus] = useState<Setup>();
   const [images, setImages] = useState<string[]>([]);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
   const [remove, setRemove] = useState(false);
+  const initialCheck = useRef(true);
+  const [showIntro, setShowIntro] = useState(!firstRun);
   async function refresh() {
     setPending(true); setError('');
     try {
@@ -18,6 +20,10 @@ export function MonitorSetup({ device, completed }: { device: Device; completed?
       if (!reply.ok) throw new Error(reply.error);
       const value = reply.result as Setup;
       if (!value || !Array.isArray(value.candidates)) throw new Error('后台未返回有效的监控检测结果。');
+      const alreadyInstalled = initialCheck.current && Boolean(value.images?.length);
+      initialCheck.current = false;
+      if (firstRun && alreadyInstalled) { completed?.(); return; }
+      setShowIntro(true);
       setStatus(value); setImages(current => current.length ? current : value.images ?? value.candidates);
       if (value.state === 'ready') { device.report(value.message); completed?.(); }
     } catch (error) { setError(String(error)); }
@@ -44,7 +50,8 @@ export function MonitorSetup({ device, completed }: { device: Device; completed?
       if (selected) setImages(typeof selected === 'string' ? [selected] : selected);
     } catch (error) { setError(String(error)); }
   }
-  return <Card title="配置 Codex 监控" caption="首次使用完成这三步，即可将 Codex 状态同步到设备">
+  if (firstRun && !showIntro && !error) return null;
+  return <div className={firstRun ? 'setup-welcome' : undefined}><Card title="配置 Codex 监控" caption="首次使用完成这三步，即可将 Codex 状态同步到设备">
     <p aria-live="polite" className="setup-status">{pending ? '正在检查或配置监控…' : status?.message ?? '等待设备后台就绪'}</p>
     {error && <p role="alert" className="conflict-notice">{error}</p>}
     <ol className="setup-steps"><li><h3>选择 Codex 程序并安装采集组件</h3><p>启动 Codex 后点击重新检测，可找到运行中的程序；也可以手动选择 Codex.exe。支持同时选择桌面版和 CLI。</p>
@@ -60,5 +67,5 @@ export function MonitorSetup({ device, completed }: { device: Device; completed?
     {status?.images && <div className="setup-remove"><Checkbox checked={remove} disabled={!editable} onChange={(_, data) => setRemove(Boolean(data.checked))} label="我确认移除 Omi 的监控 Hook，停止采集；保留其他 Hook、备份与历史状态" />
       <Button disabled={!editable || !remove} onClick={() => void apply('monitor-setup-uninstall')}>卸载监控接入</Button></div>}
     <p className="module-note">仅记录状态和关联元数据，不保存对话正文、工具参数或回复。尚未收到事件时无法区分未信任与尚未触发，请按上方步骤检查。</p>
-  </Card>;
+  </Card>{firstRun && <Button appearance="subtle" onClick={completed}>稍后配置，以后从设置进入</Button>}</div>;
 }

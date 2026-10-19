@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { expect, it, vi } from 'vitest';
 import { MonitorSetup } from './MonitorSetup';
@@ -21,7 +21,7 @@ it('installs selected images but only completes after genuine ready status; unin
   const { device, request, ready } = fixture();
   const completed = vi.fn();
   const user = userEvent.setup();
-  render(<MonitorSetup device={device} completed={completed} />);
+  render(<MonitorSetup device={device} completed={completed} firstRun />);
   const install = await screen.findByRole('button', { name: '安装监控组件' });
   await waitFor(() => expect((install as HTMLButtonElement).disabled).toBe(false));
   await user.click(install);
@@ -54,4 +54,16 @@ it('reports setup failures without claiming installation succeeded', async () =>
   render(<MonitorSetup device={device} />);
   expect((await screen.findByRole('alert')).textContent).toContain('配置已被修改');
   expect(device.report).not.toHaveBeenCalled();
+});
+
+it.each(['ready', 'awaiting-event', 'awaiting-binding', 'repair'])('hides an existing %s installation on the first-run surface without flashing the wizard', async state => {
+  const { device } = fixture(); const completed = vi.fn();
+  let resolve!: (reply: Awaited<ReturnType<Device['request']>>) => void;
+  device.request = vi.fn(() => new Promise<Awaited<ReturnType<Device['request']>>>(done => { resolve = done; }));
+  render(<MonitorSetup device={device} completed={completed} firstRun />);
+  expect(screen.queryByRole('heading', { name: '配置 Codex 监控' })).toBeNull();
+  await act(async () => resolve({ ok: true, result: { state, candidates: [], images: ['C:/Codex.exe'] }, events: [] }));
+  expect(completed).toHaveBeenCalledOnce();
+  expect(screen.queryByRole('heading', { name: '配置 Codex 监控' })).toBeNull();
+  if (state !== 'ready') expect(device.report).not.toHaveBeenCalled();
 });

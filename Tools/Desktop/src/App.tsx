@@ -30,7 +30,17 @@ export default function App() {
 
 export function Desktop({ device, appearance: { dark, theme, preference, setPreference } }: { device: Device; appearance: ReturnType<typeof useAppTheme> }) {
   const [page, setPage] = useState('overview');
-  const [setupChecked, setSetupChecked] = useState(false);
+  const [setupChecked, setSetupChecked] = useState(() => {
+    try { return localStorage.getItem('omi.monitorSetup.dismissed') === '1'; }
+    catch { return false; }
+  });
+  function dismissSetup() {
+    setSetupChecked(true);
+    try { localStorage.setItem('omi.monitorSetup.dismissed', '1'); }
+    catch {
+      //  存储不可用时仍允许本次收起 / Allow dismissal for this session when storage is unavailable
+    }
+  }
   const [sidebarWidth, setSidebarWidth] = useState(216);
   const [light, setLight] = useState<LightDraft>({ color: '#FFFFFF', brightness: 16, effect: 'solid' });
   const heading = pages.find(item => item.id === page)!;
@@ -55,7 +65,7 @@ export function Desktop({ device, appearance: { dark, theme, preference, setPref
         </div></header>
         <main key={page} id="page-content"><div className="page-heading"><div><h1>{heading.title}</h1><p>{heading.caption}</p></div>
           <span className="policy-label"><ShieldCheckmark20Regular />{device.demo ? '模拟设备' : '语音优先'}</span></div>
-          {page === 'overview' && <>{!setupChecked && !device.demo && <div className="setup-welcome"><MonitorSetup device={device} completed={() => setSetupChecked(true)} /><Button appearance="subtle" onClick={() => setSetupChecked(true)}>稍后配置，本次先查看设备</Button></div>}<Overview device={device} light={light} navigate={setPage} /></>}
+          {page === 'overview' && <>{!setupChecked && !device.demo && <MonitorSetup device={device} firstRun completed={dismissSetup} />}<Overview device={device} light={light} navigate={setPage} /></>}
           {page === 'lights' && <LocalLights device={device} draft={light} change={setLight} />}
           {page === 'monitor-lights' && <MonitorLights key={`${device.endpoint}-${device.connected}`} profile={device.snapshot.monitorProfile}
             enabled={active && Boolean(device.snapshot.state)} connected={device.connected} supported={Boolean(device.snapshot.operations?.includes('monitorProfile'))}

@@ -25,6 +25,7 @@ async function connect(snapshot = status()) {
   return user;
 }
 beforeEach(() => {
+  localStorage.clear();
   bridge.native = true;
   bridge.events = [];
   bridge.invoke.mockReset().mockImplementation(async (_command, { message }) => ({ ok: true,
@@ -35,6 +36,36 @@ beforeEach(() => {
 });
 
 describe('USB desktop', () => {
+  it('remembers dismissing first-run setup and keeps setup available in settings', async () => {
+    const user = userEvent.setup();
+    const view = render(<App />);
+    await user.click(await screen.findByRole('button', { name: '稍后配置，以后从设置进入' }));
+    expect(screen.queryByRole('heading', { name: '配置 Codex 监控' })).toBeNull();
+    view.unmount();
+    render(<App />);
+    await waitFor(() => expect((screen.getByRole('tab', { name: 'USB' }) as HTMLButtonElement).disabled).toBe(false));
+    expect(screen.queryByRole('heading', { name: '配置 Codex 监控' })).toBeNull();
+    await user.click(screen.getByRole('button', { name: '设置' }));
+    expect(await screen.findByRole('heading', { name: '配置 Codex 监控' })).toBeTruthy();
+  });
+
+  it('remembers an existing installation without requiring a fresh host event on every launch', async () => {
+    bridge.invoke.mockImplementation(async (_command, { message }) => ({ ok: true,
+      result: message.action === 'init' ? { demo: false, root: 'C:/state', bindings: 'C:/bindings', ports: [] }
+        : message.action === 'monitor-setup-status' ? { state: 'awaiting-binding', message: '等待新的工具事件',
+          packaged: true, candidates: [], images: ['C:/Codex.exe'], home: 'C:/codex', root: 'C:/state' } : null,
+      events: [] }));
+    const view = render(<App />);
+    await waitFor(() => expect(localStorage.getItem('omi.monitorSetup.dismissed')).toBe('1'));
+    expect(screen.queryByRole('heading', { name: '配置 Codex 监控' })).toBeNull();
+    view.unmount();
+    bridge.invoke.mockClear();
+    render(<App />);
+    await waitFor(() => expect((screen.getByRole('tab', { name: 'USB' }) as HTMLButtonElement).disabled).toBe(false));
+    expect(bridge.invoke.mock.calls.some(([, args]) => args.message.action === 'monitor-setup-status')).toBe(false);
+    expect(screen.queryByRole('heading', { name: '配置 Codex 监控' })).toBeNull();
+  });
+
   it('requires explicit repair selection and clears the new screen code on submit', async () => {
     const user = userEvent.setup();
     render(<App />);
