@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 from pathlib import Path
 import sys
@@ -10,7 +10,7 @@ from unittest.mock import patch
 TOOLS = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(TOOLS / "CodexMonitor"), str(TOOLS / "DeviceBridge"), str(TOOLS / "Desktop")]
 from state_view import LifecycleReader
-from protocol import Limits, SnapshotMapper
+from protocol import Limits, ProtocolError, SnapshotMapper
 from controller import ControlSession, SimulatedClient
 
 
@@ -65,6 +65,56 @@ class LifecycleReaderTests(unittest.TestCase):
         self.reader()
         self.advance(90)
         self.assertEqual(self.wire(self.reader())["overallStatus"], "waitingApproval")
+
+    def test_historical_sessions_do_not_exhaust_device_capacity_or_modify_history(self):
+        old = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+        for number in range(17):
+            self.snapshot["sessions"].append(dict(self.snapshot["sessions"][0],
+                sessionId=f"history-{number}", updatedAtUtc=old))
+        self.save()
+        original = (self.root / "snapshot.json").read_bytes()
+        view = self.reader()
+        self.assertEqual(view["historicalSessionCount"], 17)
+        self.assertEqual(self.wire(view)["overallStatus"], "working")
+        self.assertEqual((self.root / "snapshot.json").read_bytes(), original)
+        self.advance(90)
+        self.assertEqual(self.wire(self.reader())["overallStatus"], "working")
+
+    def test_completed_sessions_collapse_but_active_wait_and_real_overflow_remain(self):
+        self.write_event("waitingApproval")
+        self.reader()
+        self.advance(90)
+        for number in range(17):
+            session = f"done-{number}"
+            event = dict(self.snapshot["sessions"][0], sessionId=session, status="idle", lastEvent="Stop")
+            self.snapshot["sessions"].append(event)
+            self.bindings["sessions"][session] = dict(self.bindings["sessions"]["test"],
+                observedMonotonicNs=str(self.clock), proof={key: event[key] for key in
+                    ("updatedAtUtc", "lastEvent", "turnId", "toolUseId")})
+        self.save()
+        view = self.reader()
+        self.assertEqual(len(view["sessions"]), 2)
+        self.assertEqual(self.wire(view)["overallStatus"], "waitingApproval")
+        for event in self.snapshot["sessions"]:
+            event["status"] = "working"
+        self.save()
+        with self.assertRaises(ProtocolError):
+            self.wire(self.reader())
+
+    def test_lost_active_proof_is_not_archived_to_make_another_idle_session_green(self):
+        self.reader()
+        self.advance(90)
+        done = dict(self.snapshot["sessions"][0], sessionId="done", status="idle", lastEvent="Stop")
+        self.snapshot["sessions"].append(done)
+        self.bindings["sessions"]["done"] = dict(self.bindings["sessions"]["test"],
+            observedMonotonicNs=str(self.clock), proof={key: done[key] for key in
+                ("updatedAtUtc", "lastEvent", "turnId", "toolUseId")})
+        self.bindings["sessions"]["test"]["confirmed"] = False
+        self.save()
+        for _ in range(2):
+            view = self.reader()
+            self.assertEqual(view["overallStatus"], "unknown")
+            self.assertEqual(len(view["sessions"]), 2)
 
     def test_old_record_is_not_admitted_on_start_or_reset(self):
         self.advance(31)

@@ -119,11 +119,18 @@ class HostBindingSidecarTests(unittest.TestCase):
         self.assertFalse(self.feed(self.event("PostToolUse")))
         self.assertEqual(self.projected()["overallStatus"], "unknown")
 
-    def test_capacity_fails_closed(self):
+    def test_history_does_not_stop_new_or_existing_binding_updates(self):
         self.config["maxSessions"] = 1
-        self.feed(self.event("SessionStart", session="private-a"))
-        self.assertFalse(self.feed(self.event("SessionStart", session="private-b")))
-        self.assertNotIn("private-b", self.bindings()["sessions"])
+        for number in range(17):
+            session = f"history-{number}"
+            self.feed(self.event("PreToolUse", session=session))
+            self.assertTrue(self.feed(self.event("PostToolUse", session=session)))
+            self.feed(self.event("Stop", session=session))
+        self.feed(self.event("PreToolUse"))
+        self.assertTrue(self.feed(self.event("PostToolUse")))
+        self.assertEqual(len(self.bindings()["sessions"]), 18)
+        self.assertTrue(self.feed(self.event("Stop")))
+        self.assertEqual(self.bindings()["sessions"]["private-a"]["proof"]["lastEvent"], "Stop")
 
 
 if __name__ == "__main__":

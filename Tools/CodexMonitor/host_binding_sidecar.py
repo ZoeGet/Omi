@@ -74,8 +74,7 @@ def update(root, payload, configuration, *, expected_updated_at,
                 or not event_was_applied(root, state, session_id)):
             return False
         current = json.loads((root / "snapshot.json").read_text(encoding="utf-8"))
-        if (current.get("schema") != 2 or not isinstance(current.get("sessions"), list)
-                or len(current["sessions"]) > limit):
+        if current.get("schema") != 2 or not isinstance(current.get("sessions"), list):
             return False
         ids = {entry.get("sessionId") for entry in current["sessions"] if isinstance(entry, dict)}
         if session_id not in ids:
@@ -106,8 +105,7 @@ def update(root, payload, configuration, *, expected_updated_at,
                                                ("pid", "creationTime100ns", "imagePath")},
                                        proof=event_proof(state), confirmed=confirmed, pending=pending,
                                        observedMonotonicNs=str(observed_monotonic_ns))
-        if len(entries) > limit:
-            return False
+        #  侧文件保存历史证明，设备容量只约束桌面当前视图。 / Archive proofs here; device capacity applies only to the desktop's current view.
         data = dict(schema=2, sessions=entries)
         if save is None:
             staged = target.with_name(target.name + ".tmp")

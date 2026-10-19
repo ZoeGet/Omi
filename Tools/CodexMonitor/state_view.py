@@ -168,9 +168,11 @@ class LifecycleReader:
         self.max_age_seconds = max_age_seconds
         self.process_checker, self.monotonic_ns = process_checker, monotonic_ns
         self.admitted = {}
+        self.tracked = set()
 
     def reset(self):
         self.admitted.clear()
+        self.tracked.clear()
 
     def __call__(self):
         #  与事件包装器共用原有互斥锁，读取同一次完整发布。 / Share the event wrapper's existing mutex to read a complete publication.
@@ -202,7 +204,26 @@ class LifecycleReader:
                     #  限制：漏结束事件会保留状态，待逐聊天校验接口替换。 / shortcut: missed end events retain state; replace when per-chat verification is available.
                     entry.update(displayStatus=entry["lastObservedStatus"], reason="observed-lifecycle",
                                  assessmentAgeSeconds=0)
-        self.admitted = retained
+        #  历史不占设备会话名额；已接纳的运行/等待不按静默时长淘汰。 / History consumes no device slots; admitted work and waits survive silence.
+        visible, completed = [], []
+        for entry in view["sessions"]:
+            age = entry.get("observationAgeSeconds")
+            if age is None or age <= self.max_age_seconds:
+                self.tracked.add(entry["sessionId"])
+            if entry["sessionId"] in retained:
+                (completed if entry["displayStatus"] in ("idle", "offline") else visible).append(entry)
+            else:
+                if (age is None or age <= self.max_age_seconds or entry["sessionId"] in self.tracked
+                        and entry["lastObservedStatus"] not in ("idle", "offline")):
+                    visible.append(entry)
+        if completed:
+            visible.append(max(completed, key=lambda entry: entry["lastObservedAtUtc"]))
+        if not visible and view["sessions"]:
+            visible.append(max(view["sessions"], key=lambda entry: entry["lastObservedAtUtc"] or ""))
+        view["historicalSessionCount"] = len(view["sessions"]) - len(visible)
+        view["sessions"] = visible
+        self.admitted = {entry["sessionId"]: retained[entry["sessionId"]] for entry in visible
+                         if entry["sessionId"] in retained}
         view["statusBasis"] = "observed-lifecycle"
         view["overallStatus"] = overall_status(view["sessions"])
         return view
