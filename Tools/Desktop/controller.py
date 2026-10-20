@@ -42,6 +42,7 @@ class ControlSession:
     def connect(self, *, local=True):
         self.reopen()
         welcome = self.client.connect()
+        self.last_light = None
         self.operations = set(welcome["body"]["operations"])
         self.monitor_profile = None
         self.monitor_lights = self.client.host.monitor_lights
@@ -68,6 +69,7 @@ class ControlSession:
             raise ProtocolError("local-mode-unconfirmed")
         self.monitor_requested = False
         self.bridge = None
+        self.last_light = None
 
     def monitor(self):
         if not self.monitor_green_off:
@@ -84,6 +86,7 @@ class ControlSession:
                              allow_fresh_display=True,
                              delivery_reserve_seconds=DELIVERY_RESERVE_SECONDS)
         self.monitor_requested = True
+        self.last_light = None
         self.tick()
 
     def light(self, setting):

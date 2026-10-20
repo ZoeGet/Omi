@@ -10,12 +10,18 @@ const colors = [
   '#0080FF', '#0000FF', '#6A5ACD', '#8A2BE2', '#BF00FF', '#FF00FF', '#FF69B4', '#FFB6C1',
 ];
 
-export function LocalLights({ device, draft, change }: { device: Device; draft: LightDraft; change: (light: LightDraft) => void }) {
+export function LocalLights({ device, draft, change, edited = false }: { device: Device; draft: LightDraft; edited?: boolean; change: (light: LightDraft) => void }) {
   const { connected, busy, snapshot } = device;
   const colorInput = useRef<HTMLInputElement>(null);
   const monitoring = Boolean(snapshot.monitorRequested);
   const editable = device.ready && connected && !busy && !monitoring && snapshot.state?.mode === 'local' && Boolean(snapshot.operations?.includes('light'));
   const percent = Math.round(draft.brightness / 255 * 100);
+  const confirmed = snapshot.lastLight;
+  const applied = confirmed && confirmed.effect === draft.effect && confirmed.brightness === draft.brightness
+    && `#${[confirmed.red, confirmed.green, confirmed.blue].map(value => value.toString(16).padStart(2, '0')).join('')}`.toUpperCase() === draft.color.toUpperCase();
+  const applyStatus = device.lightResult === 'pending' ? '正在应用，等待设备确认…'
+    : device.lightResult === 'failed' ? '应用未确认，修改仍保留'
+    : applied ? '已应用（设备已确认）' : confirmed || edited ? '有未应用修改' : '尚未应用，当前为预览值';
   function apply() {
     const rgb = draft.color.slice(1).match(/../g)!.map(value => parseInt(value, 16));
     void device.send('light', { effect: draft.effect, red: rgb[0], green: rgb[1], blue: rgb[2], brightness: draft.brightness });
@@ -41,7 +47,7 @@ export function LocalLights({ device, draft, change }: { device: Device; draft: 
     <Card title="灯光预览" caption="模拟编辑值的颜色、亮度与动画，不是设备实时读回"><LightStrip color={draft.color} effect={draft.effect} brightness={draft.brightness} /><p className="muted">{draft.effect === 'rainbow' ? '独立彩虹色谱' : draft.color} · 亮度 {percent}%</p></Card>
     <Card title="监控灯光规则"><ul className="rules">{monitorStates.map(([key, title]) => <li key={key}><i style={{ backgroundColor: snapshot.monitorProfile?.profiles[key] ? lightColor(snapshot.monitorProfile.profiles[key]) : 'var(--muted)' }} /><span>{title}</span>
       <strong>{snapshot.monitorProfile?.profiles[key] ? lightDescription(snapshot.monitorProfile.profiles[key]) : key === 'working' ? '红色扩散灯' : key === 'waitingApproval' ? '黄色扩散灯' : '绿色扩散灯'}</strong></li>)}</ul><p className="module-note">来源异常和离线使用设备保存的配置；连接断开则关灯。</p></Card>
-    <section className="apply-row"><p>{!connected ? '请先连接设备。' : monitoring ? '监控模式已锁定手动灯光，请先切回本地。' : !editable ? '等待设备就绪或确认灯光能力。' : '收到设备回执后才确认成功。'}</p>
+    <section className="apply-row"><div><strong role="status">{applyStatus}</strong><p>{!connected ? '请先连接设备。' : monitoring ? '监控模式已锁定手动灯光，请先切回本地。' : !editable ? '等待设备就绪或确认灯光能力。' : '收到设备回执后才确认成功。'}</p></div>
       <Button appearance="primary" disabled={!editable} onClick={apply}>应用灯光设置</Button></section>
   </div>;
 }

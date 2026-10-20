@@ -43,6 +43,7 @@ export function Desktop({ device, appearance: { dark, theme, preference, setPref
   }
   const [sidebarWidth, setSidebarWidth] = useState(216);
   const [light, setLight] = useState<LightDraft>({ color: '#FFFFFF', brightness: 16, effect: 'rainbow' });
+  const [lightEdited, setLightEdited] = useState(false);
   const heading = pages.find(item => item.id === page)!;
   const active = device.ready && device.connected && !device.busy;
   const connectionMode = device.snapshot.monitorRequested
@@ -72,7 +73,7 @@ export function Desktop({ device, appearance: { dark, theme, preference, setPref
         <main key={page} id="page-content"><div className="page-heading"><div><h1>{heading.title}</h1><p>{heading.caption}</p></div>
           {page !== 'pairing' && <span className="policy-label"><ShieldCheckmark20Regular />{device.demo ? '模拟设备' : '语音优先'}</span>}</div>
           {page === 'overview' && <>{!setupChecked && !device.demo && <MonitorSetup device={device} firstRun completed={dismissSetup} />}<Overview device={device} light={light} navigate={setPage} /></>}
-          {page === 'lights' && <LocalLights device={device} draft={light} change={setLight} />}
+          {page === 'lights' && <LocalLights device={device} draft={light} edited={lightEdited} change={value => { setLight(value); setLightEdited(true); }} />}
           {page === 'monitor-lights' && <MonitorLights key={`${device.endpoint}-${device.connected}`} profile={device.snapshot.monitorProfile}
             enabled={active && Boolean(device.snapshot.state)} connected={device.connected} supported={Boolean(device.snapshot.operations?.includes('monitorProfile'))}
             demo={device.demo} save={profile => void device.send('monitor-profile', profile)} read={() => void device.send('monitor-profile-read')} />}

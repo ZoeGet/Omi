@@ -67,6 +67,14 @@ class WssStreamTests(unittest.TestCase):
         self.wire.ws.send.assert_not_called()
         self.wire.close.assert_called_once()
 
+    def test_unreachable_network_is_retryable_but_identity_failure_is_not(self):
+        for error, code in [(OSError('offline'), 'wireless-unavailable'),
+                            (ValueError('identity changed'), 'wireless-authentication-failed')]:
+            self.factory.side_effect = error
+            with self.assertRaisesRegex(ProtocolError, '^' + code + '$'):
+                self.stream.open()
+            self.assertFalse(self.stream.is_open)
+
     def test_reconnect_reauthenticates_and_discards_old_buffer(self):
         self.stream.open()
         self.stream.buffer.extend(b'old response')

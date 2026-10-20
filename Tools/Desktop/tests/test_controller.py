@@ -14,6 +14,14 @@ def setting(**changes):
 
 
 class ControllerTests(unittest.TestCase):
+    def test_mode_changes_and_new_handshake_invalidate_prior_light_confirmation(self):
+        for action in (self.control.local, self.control.monitor, self.control.connect):
+            self.control.local()
+            self.control.light(setting())
+            self.assertIsNotNone(self.control.last_light)
+            action()
+            self.assertIsNone(self.control.last_light)
+
     def test_self_check_tracks_current_source_and_never_exports_session_details(self):
         self.assertEqual(self.control.snapshot()['monitorSource']['state'], 'inactive')
         self.control.monitor()

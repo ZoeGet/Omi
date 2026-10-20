@@ -38,6 +38,57 @@ beforeEach(() => {
 });
 
 describe('USB desktop', () => {
+  it('restores the last endpoint at startup and keeps manual disconnect disabled across restarts', async () => {
+    localStorage.setItem('omi.lastConnection', JSON.stringify({ port: 'COM17', transport: 'usb', enabled: true }));
+    const view = render(<App />);
+    await waitFor(() => expect(bridge.invoke.mock.calls.some(([, args]) => args.message.action === 'connect')).toBe(true));
+    bridge.events.push({ kind: 'connected', port: 'COM17', transport: 'usb' }, status());
+    const user = userEvent.setup();
+    const disconnect = screen.getByRole('button', { name: '断开连接' });
+    await waitFor(() => expect((disconnect as HTMLButtonElement).disabled).toBe(false));
+    await user.click(disconnect);
+    expect(JSON.parse(localStorage.getItem('omi.lastConnection')!).enabled).toBe(false);
+    bridge.events.push({ kind: 'disconnected', releaseConfirmed: true });
+    await waitFor(() => expect((disconnect as HTMLButtonElement).disabled).toBe(true));
+    view.unmount();
+    bridge.invoke.mockClear();
+    render(<App />);
+    await waitFor(() => expect((screen.getByRole('button', { name: '连接设备' }) as HTMLButtonElement).disabled).toBe(false));
+    expect(bridge.invoke.mock.calls.some(([, args]) => args.message.action === 'connect')).toBe(false);
+  });
+
+  it('allows cancelling automatic reconnection while other controls remain locked', async () => {
+    render(<App />);
+    const user = await connect();
+    bridge.events.push({ kind: 'reconnecting', attempt: 1, delay: 2 });
+    const cancel = await screen.findByRole('button', { name: '取消重连' });
+    expect((cancel as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole('switch', { name: '本地灯光' }) as HTMLInputElement).disabled).toBe(true);
+    await user.click(cancel);
+    expect(bridge.invoke.mock.calls.some(([, args]) => args.message.action === 'disconnect')).toBe(true);
+    expect(JSON.parse(localStorage.getItem('omi.lastConnection')!).enabled).toBe(false);
+  });
+
+  it('retains unapplied edits across navigation and waits for ACK before showing applied', async () => {
+    render(<App />);
+    const user = await connect();
+    await user.click(screen.getByRole('button', { name: '灯光与灯效' }));
+    await user.click(screen.getByRole('button', { name: '选择颜色 #0000FF' }));
+    await user.click(screen.getByRole('button', { name: '常亮' }));
+    await user.click(screen.getByRole('button', { name: '设备概览' }));
+    await user.click(screen.getByRole('button', { name: '灯光与灯效' }));
+    expect(screen.getByRole('button', { name: '选择颜色 #0000FF' }).getAttribute('aria-pressed')).toBe('true');
+    await user.click(screen.getByRole('button', { name: '应用灯光设置' }));
+    expect(screen.getByText('正在应用，等待设备确认…')).toBeTruthy();
+    bridge.events.push({ kind: 'command', command: 'light', ok: true }, status({ lastLight: { effect: 'solid', red: 0, green: 0, blue: 255, brightness: 16 } }));
+    await screen.findByText('已应用（设备已确认）');
+    await user.click(screen.getByRole('button', { name: '选择颜色 #FF0000' }));
+    expect(screen.getByText('有未应用修改')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: '应用灯光设置' }));
+    bridge.events.push({ kind: 'command', command: 'light', ok: false, error: 'voice-active' });
+    await screen.findByText('应用未确认，修改仍保留');
+  });
+
   it('starts local lighting with rainbow and keeps it after returning from monitoring', async () => {
     render(<App />);
     const user = await connect();

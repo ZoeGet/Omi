@@ -22,8 +22,8 @@ export function Overview({ device, light, navigate }: { device: Device; light: L
   const [wirelessError, setWirelessError] = useState('');
   const [wirelessRefresh, setWirelessRefresh] = useState(0);
   useEffect(() => {
-    if (connected && device.transport) setConnectionType(device.transport);
-  }, [connected, device.transport]);
+    if (device.transport) setConnectionType(device.transport);
+  }, [device.transport]);
   useEffect(() => {
     if (connectionType !== 'wifi' || !device.ready || connected || busy || device.demo) return;
     let cancelled = false;
@@ -34,12 +34,12 @@ export function Overview({ device, light, navigate }: { device: Device; light: L
       const devices = reply.result as typeof wirelessDevices;
       setWirelessDevices(devices);
       const available = devices.filter(item => item.confirmed && !item.pendingRepair);
-      setWirelessAddress(current => available.some(item => item.address === current) ? current : available.length === 1 ? available[0].address : '');
+      setWirelessAddress(current => available.some(item => item.address === (current || device.endpoint)) ? current || device.endpoint! : available.length === 1 ? available[0].address : '');
     }).catch(error => {
       if (!cancelled) { setWirelessDevices([]); setWirelessAddress(''); setWirelessError(String(error)); }
     }).finally(() => { if (!cancelled) setWirelessLoading(false); });
     return () => { cancelled = true; };
-  }, [connectionType, device.ready, connected, busy, device.demo, device.request, wirelessRefresh]);
+  }, [connectionType, device.ready, connected, busy, device.demo, device.request, device.endpoint, wirelessRefresh]);
   const wifi = connectionType === 'wifi';
   const canConnect = canConfigure && settings.root && settings.bindings && (wifi
     ? !wirelessLoading && wirelessDevices.some(item => item.address === wirelessAddress && item.confirmed && !item.pendingRepair)
@@ -51,7 +51,8 @@ export function Overview({ device, light, navigate }: { device: Device; light: L
     unknown: { title: '来源异常', color: '#20a66a', note: '绿色扩散灯 · 状态仍为未知' },
     offline: { title: '会话离线', color: '#20a66a', note: '绿色扩散灯' },
   };
-  const display = !connected ? { title: '等待连接', color: '#8a8a8a', note: '连接设备后显示实际状态' }
+  const display = device.reconnecting ? { title: '正在重连', color: '#dba32c', note: device.notice }
+    : !connected ? { title: device.connectionError ? '需要手动连接' : '等待连接', color: '#8a8a8a', note: device.connectionError ?? '连接设备后显示实际状态' }
     : !confirmed || monitoring && !monitorConnected ? { title: '连接中断', color: '#8a8a8a', note: '设备检测到断联后关灯，等待重新连接' }
     : !monitoring ? { title: '本地灯光', color: '#3987c6', note: '灯光由手动设置或语音控制' }
     : (() => { const base = defaults[confirmed.displayStatus] ?? defaults.unknown; const p = saved?.[confirmed.displayStatus];
@@ -80,7 +81,7 @@ export function Overview({ device, light, navigate }: { device: Device; light: L
             {device.ports.map(port => <option key={port.device} value={port.device}>{port.device} · {port.description}</option>)}
           </Select><Button icon={<ArrowSync20Regular />} disabled={!canConfigure} onClick={() => void device.refresh()} aria-label="刷新串口" /></div>}
           <div className="button-row"><Button appearance="primary" disabled={!canConnect}
-            onClick={() => void device.send(wifi ? 'connect-wireless' : 'connect', wifi ? { ...settings, port: wirelessAddress } : settings)}>连接设备</Button><Button disabled={!connected || busy} onClick={() => void device.send('disconnect')}>断开连接</Button></div>
+            onClick={() => void device.send(wifi ? 'connect-wireless' : 'connect', wifi ? { ...settings, port: wirelessAddress } : settings)}>连接设备</Button><Button disabled={!device.reconnecting && (!connected || busy)} onClick={() => void device.send('disconnect')}>{device.reconnecting ? '取消重连' : '断开连接'}</Button></div>
         </div></div>
     </Card>
     <Card title="控制模式" caption="选择本地控制，或跟随 Codex 状态">

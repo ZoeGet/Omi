@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 
 export type Light = { effect: string; red: number; green: number; blue: number; brightness: number };
@@ -17,6 +17,7 @@ export type WorkerEvent = Partial<Snapshot> & {
   kind: string; port?: string; ok?: boolean; command?: string; error?: string;
   releaseConfirmed?: boolean; monitorOff?: boolean;
   transport?: 'usb' | 'wifi';
+  attempt?: number; delay?: number;
   pairingState?: string;
 };
 type Reply = { ok: boolean; result?: unknown; error?: string; events: WorkerEvent[] };
@@ -24,6 +25,7 @@ type State = {
   ready: boolean; connected: boolean; busy: boolean; demo: boolean;
   ports: Port[]; settings: Settings; snapshot: Partial<Snapshot>; notice: string; logs: string[];
   transport?: 'usb' | 'wifi'; endpoint?: string;
+  reconnecting?: boolean; connectionError?: string; lightResult?: 'pending' | 'failed' | 'confirmed';
   pairingInspection?: { address: string; state: string };
 };
 export const pairingStatusText: Record<string, string> = {
@@ -45,6 +47,9 @@ const errors: Record<string, string> = {
   'wireless-pairing-required': '请先在无线配对页保存此设备。',
   'wireless-authentication-failed': '无线设备认证失败；换网后请到无线配对页，点击重新查找设备。',
   'wireless-disconnected': '无线连接已断开，等待重新连接。',
+  'wireless-unavailable': '无线设备暂时不可达。',
+  'reconnect-exhausted': '自动重连未成功，请检查供电、串口或网络后手动连接。',
+  'connection-interrupted': '连接已中断，未发送的操作已取消，请恢复连接后重新应用。',
   'wireless-send-failed': '无线发送失败，请检查设备网络。',
   'wireless-receive-failed': '无线接收失败，请检查设备网络。',
   'device-not-ready': '设备尚未就绪，请等待当前操作完成。',
@@ -67,7 +72,12 @@ export function applyEvents(state: State, events: WorkerEvent[]): State {
   for (const event of events) {
     switch (event.kind) {
       case 'connected':
-        state = log({ ...state, connected: true, busy: false, transport: event.transport ?? 'usb', endpoint: event.port }, `已连接 ${event.port}，设备握手成功。`);
+        state = log({ ...state, connected: true, busy: false, reconnecting: false, connectionError: undefined, lightResult: undefined,
+          snapshot: {}, transport: event.transport ?? 'usb', endpoint: event.port }, `已连接 ${event.port}，设备握手成功。`);
+        break;
+      case 'reconnecting':
+        state = log({ ...state, connected: false, busy: true, reconnecting: true, snapshot: {}, lightResult: undefined },
+          `正在自动重连（${event.attempt}/5），${event.delay} 秒后重试，可取消。`);
         break;
       case 'status':
         if (state.snapshot.monitorRequested && !event.monitorRequested && event.state?.mode === 'local') {
@@ -76,7 +86,8 @@ export function applyEvents(state: State, events: WorkerEvent[]): State {
         state = { ...state, snapshot: event };
         break;
       case 'command':
-        state = log({ ...state, busy: false }, event.ok ? commands[event.command!] : errorText(event.error!));
+        state = log({ ...state, busy: false,
+          lightResult: event.command === 'light' ? event.ok ? 'confirmed' : 'failed' : state.lightResult }, event.ok ? commands[event.command!] : errorText(event.error!));
         break;
       case 'pairing':
         if (event.command === 'inspect-wireless' || event.pairingState) {
@@ -96,11 +107,11 @@ export function applyEvents(state: State, events: WorkerEvent[]): State {
         if (state.notice !== errorText(event.error!)) state = log(state, errorText(event.error!));
         break;
       case 'connection-error':
-        state = log(state, errorText(event.error!));
+        state = log({ ...state, reconnecting: false, connectionError: errorText(event.error!) }, `${errorText(event.error!)} 请检查后手动连接。`);
         break;
       case 'disconnected':
-        state = log({ ...state, connected: false, busy: false, snapshot: {} },
-          event.releaseConfirmed ? event.monitorOff ? '已断开，设备确认监控输出关闭。' : '已断开，设备确认释放控制。'
+        state = log({ ...state, connected: false, busy: false, reconnecting: false, snapshot: {}, lightResult: undefined },
+          state.connectionError ? state.notice : event.releaseConfirmed ? event.monitorOff ? '已断开，设备确认监控输出关闭。' : '已断开，设备确认释放控制。'
             : '连接已关闭，未收到释放确认；设备由既有租约规则回退。');
         break;
     }
@@ -108,15 +119,32 @@ export function applyEvents(state: State, events: WorkerEvent[]): State {
   return state;
 }
 
+type LastConnection = { port: string; transport: 'usb' | 'wifi'; enabled: boolean };
+function lastConnection(): LastConnection | null {
+  try {
+    const saved = JSON.parse(localStorage.getItem('omi.lastConnection') ?? 'null');
+    return saved && typeof saved.port === 'string' && saved.port && ['usb', 'wifi'].includes(saved.transport)
+      && typeof saved.enabled === 'boolean' ? saved : null;
+  } catch { return null; }
+}
+function rememberConnection(value: LastConnection) {
+  try { localStorage.setItem('omi.lastConnection', JSON.stringify(value)); }
+  catch {
+    //  偏好保存失败不影响本次连接 / A failed preference write does not affect the current connection
+  }
+}
+
 export function useDevice() {
   const native = isTauri();
+  const manuallyDisconnected = useRef(false);
   const [state, setState] = useState<State>({ ready: false, connected: false, busy: false, demo: false,
     ports: [], settings: { port: '', root: '', bindings: '' }, snapshot: {}, logs: [],
     notice: native ? '正在启动设备后台…' : '浏览器仅预览界面，请打开桌面程序连接设备。' });
   const report = useCallback((text: string) => setState(value => log(value, text)), []);
   const request = useCallback(async (action: string, body: RequestBody = null) => {
     const reply = await invoke<Reply>('request', { message: { action, body } });
-    setState(value => applyEvents(reply.ok ? value : log({ ...value, busy: false }, errorText(reply.error!)), reply.events));
+    setState(value => applyEvents(reply.ok ? value : log({ ...value, busy: false,
+      lightResult: action === 'light' ? 'failed' : value.lightResult }, errorText(reply.error!)), reply.events));
     return reply;
   }, []);
 
@@ -140,19 +168,44 @@ export function useDevice() {
       if (disposed) return;
       if (!reply.ok) throw new Error(reply.error);
       const info = reply.result as { demo: boolean; root: string; bindings: string; ports: Port[] };
+      const saved = info.demo ? null : lastConnection();
       setState(value => ({ ...value, ready: true, demo: info.demo, ports: info.ports,
-        settings: { root: info.root, bindings: info.bindings, port: info.ports.length === 1 ? info.ports[0].device : '' },
+        transport: saved?.transport, endpoint: saved?.port,
+        settings: { root: info.root, bindings: info.bindings, port: saved?.transport === 'usb' ? saved.port : info.ports.length === 1 ? info.ports[0].device : '' },
         notice: info.demo ? '演示模式：仅操作模拟设备。' : '请选择 USB 串口或已配对的 Wi-Fi 设备进行连接。' }));
+      if (saved?.enabled) {
+        if (saved.transport === 'wifi' || info.ports.some(port => port.device === saved.port)) {
+          setState(value => ({ ...value, busy: true, notice: '正在连接上次使用的设备…' }));
+          void request(saved.transport === 'wifi' ? 'connect-wireless' : 'connect', { port: saved.port, root: info.root, bindings: info.bindings })
+            .catch(error => setState(value => log({ ...value, busy: false }, String(error))));
+        } else report('上次使用的 USB 串口未找到，请插入设备后手动连接。');
+      }
       void poll();
     }).catch(error => { if (!disposed) report(String(error)); });
     return () => { disposed = true; clearTimeout(timer); };
-  }, [native, report]);
+  }, [native, report, request]);
+
+  useEffect(() => {
+    if (state.connected && state.endpoint && state.transport && !state.demo && !manuallyDisconnected.current) {
+      rememberConnection({ port: state.endpoint, transport: state.transport, enabled: true });
+    }
+  }, [state.connected, state.endpoint, state.transport, state.demo]);
 
   async function send(action: string, body: RequestBody = null) {
-    if (!state.ready || state.busy) return;
-    setState(value => ({ ...value, busy: true, pairingInspection: action === 'inspect-wireless' ? undefined : value.pairingInspection }));
+    if (!state.ready || state.busy && action !== 'disconnect') return;
+    if (action === 'connect' || action === 'connect-wireless') manuallyDisconnected.current = false;
+    if (action === 'disconnect' && !state.demo) {
+      manuallyDisconnected.current = true;
+      const saved = lastConnection();
+      if (saved) rememberConnection({ ...saved, enabled: false });
+    }
+    setState(value => ({ ...value, busy: true,
+      connectionError: action.startsWith('connect') || action === 'disconnect' ? undefined : value.connectionError,
+      lightResult: action === 'light' ? 'pending' : value.lightResult,
+      pairingInspection: action === 'inspect-wireless' ? undefined : value.pairingInspection }));
     try { await request(action, body); }
-    catch (error) { setState(value => log({ ...value, busy: false, ready: false, snapshot: {} }, String(error))); }
+    catch (error) { setState(value => log({ ...value, busy: false, ready: false, snapshot: {},
+      lightResult: action === 'light' ? 'failed' : value.lightResult }, String(error))); }
   }
   async function refresh() {
     try {

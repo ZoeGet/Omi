@@ -32,6 +32,9 @@ class WssStream:
             self.wire.authenticate(record[0])
             self.store.confirm(self.address, record[0], record[1])
             self.wire.ws.settimeout(self.timeout)
+        except (OSError, websocket.WebSocketTimeoutException, websocket.WebSocketConnectionClosedException):
+            self.close()
+            raise ProtocolError("wireless-unavailable") from None
         except Exception:
             self.close()
             raise ProtocolError("wireless-authentication-failed") from None
