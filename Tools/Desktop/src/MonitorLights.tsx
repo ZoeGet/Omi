@@ -38,7 +38,7 @@ export function MonitorLights({ profile, enabled, connected, supported, demo, sa
     setDraft(value => value ? { ...value, profiles: { ...value.profiles, [status]: { ...value.profiles[status], ...patch } } } : value);
   }
   return <div className="monitor-page">
-    <div className="monitor-summary"><div><strong>{!connected ? '请先连接设备。' : !supported ? '当前固件不支持保存监控灯效，请升级固件。' : !profile ? '等待设备配置读回…' : `设备配置版本：${profile.revision}`}</strong>
+      <div className="monitor-summary"><div><strong>{!connected ? '请先连接设备。' : !supported ? '当前固件不支持保存监控灯效，请升级固件。' : !profile ? '等待设备配置读回…' : '配置已同步'}</strong>
       <p>断联或租约到期始终关灯，语音优先。</p></div><span className={`save-state ${dirty ? 'dirty' : ''}`}>{dirty ? '有未保存修改' : profile ? '已读取设备配置' : '等待设备'}</span></div>
     {demo && <p className="module-note">演示模式仅保存在模拟设备内，不代表断电持久化。</p>}
     {conflict && <p role="alert" className="conflict-notice">设备配置已改变。请重新读取设备配置，再修改并保存。</p>}
