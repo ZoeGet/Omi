@@ -16,7 +16,7 @@ Push-Location $PSScriptRoot
 try {
     & npm.cmd run tauri -- build --no-bundle
     if ($LASTEXITCODE -ne 0) { throw "Tauri build failed" }
-    $releaseDirectory = Join-Path $PSScriptRoot "release/OmiPet"
+    $releaseDirectory = Join-Path $PSScriptRoot "release/Omi"
     New-Item -ItemType Directory -Path $releaseDirectory -Force | Out-Null
     Copy-Item -LiteralPath $helperDirectory -Destination $releaseDirectory -Recurse -Force
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot "src-tauri/target/release/omipet-ui-pilot.exe") `
@@ -30,7 +30,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot "src-tauri/icons/README.md") -Destination (Join-Path $releaseDirectory "APP_ICON_SOURCE.md") -Force
     & $Python (Join-Path $PSScriptRoot "collect_licenses.py") --output $releaseDirectory
     if ($LASTEXITCODE -ne 0) { throw "Dependency license collection failed" }
-    Compress-Archive -LiteralPath $releaseDirectory -DestinationPath (Join-Path $PSScriptRoot "release/OmiPet-Windows-1.0.0.zip") -Force
+    Compress-Archive -LiteralPath $releaseDirectory -DestinationPath (Join-Path $PSScriptRoot "release/Omi-Windows-1.0.0.zip") -Force
     Write-Output $releaseDirectory
 } finally {
     Pop-Location

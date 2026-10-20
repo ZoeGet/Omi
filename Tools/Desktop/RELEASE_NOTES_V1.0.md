@@ -1,6 +1,6 @@
-# OmiPet V1.0
+# Omi V1.0
 
-OmiPet 的 Windows 设备控制中心，支持 USB / Wi-Fi 连接、本地灯光编辑和 Codex 任务状态监控。
+Omi 的 Windows 设备控制中心，支持 USB / Wi-Fi 连接、本地灯光编辑和 Codex 任务状态监控。
 
 ## V1.0 更新（2026-10-20）
 
@@ -13,11 +13,11 @@ OmiPet 的 Windows 设备控制中心，支持 USB / Wi-Fi 连接、本地灯光
 
 ## 下载哪个文件
 
-在本页 **Assets** 中下载 **OmiPet-Windows-1.0.0.zip**。这是 Windows x64 便携包，无需安装 Python、Rust 或开发工具。GitHub 自动生成的 **Source code** 仅供开发，不是可运行的上位机。
+在本页 **Assets** 中下载 **Omi-Windows-1.0.0.zip**。这是 Windows x64 便携包，无需安装 Python、Rust 或开发工具。GitHub 自动生成的 **Source code** 仅供开发，不是可运行的上位机。
 
 ## 第一次启动
 
-1. 将 ZIP **完整解压**，打开其中的 `OmiPet` 文件夹，双击 **Omi.exe**。
+1. 将 ZIP **完整解压**，打开其中的 `Omi` 文件夹，双击 **Omi.exe**。
 2. 保留 exe 旁边完整的 **omi-device** 文件夹和许可文件，不要只发送或移动单独的 exe，也不要直接在压缩包中运行。
 3. 需要 Microsoft Edge WebView2 Runtime；若系统缺失，请从 [微软官方页面](https://developer.microsoft.com/microsoft-edge/webview2/) 安装 Evergreen Runtime。
 4. 准备支持对应功能的 Omi 设备。此压缩包不会自动烧录或升级设备固件。仅使用本地灯光不需要 Codex；任务监控需要已安装并运行的本机 Codex。

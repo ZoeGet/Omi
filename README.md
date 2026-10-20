@@ -1,10 +1,10 @@
-# OmiPet
+# Omi
 
 源码提交、隐私排除和逐批推送要求见 [CONTRIBUTING.md](CONTRIBUTING.md)。本地安装包、实验日志和设备凭证不属于源码提交范围。
 
-OmiPet 是一个面向桌面陪伴场景的开源软硬件项目：它以 ESP32-S3 为核心，集成横向显示的彩色 LCD、温湿度传感器、灯带、蜂鸣器和数字麦克风，逐步实现桌面宠物、环境感知和离线语音交互。
+Omi 是一个面向桌面陪伴场景的开源软硬件项目：它以 ESP32-S3 为核心，集成横向显示的彩色 LCD、温湿度传感器、灯带、蜂鸣器和数字麦克风，逐步实现桌面宠物、环境感知和离线语音交互。
 
-> **English** — OmiPet is an open-source desktop companion project built around an ESP32-S3. It combines a landscape-oriented color LCD, environmental sensing, addressable LEDs, a buzzer, and an I²S digital microphone with an experimental offline voice interaction path.
+> **English** — Omi is an open-source desktop companion project built around an ESP32-S3. It combines a landscape-oriented color LCD, environmental sensing, addressable LEDs, a buzzer, and an I²S digital microphone with an experimental offline voice interaction path.
 
 ## 项目状态 / Project Status
 
@@ -201,7 +201,7 @@ WakeNet 是专门的唤醒模型，但当前 ESP-SR 模型包中的现成模型�
 
 Windows 主机端工具见 [Tools/CodexMonitor](Tools/CodexMonitor/README.md)：通过本地 Hook 采集多会话生命周期与审批状态，提供隐私保护、回归测试和只读诊断。用户 Hook 现启用可回退的事件关联侧文件；只有新事件与真实宿主配对的会话可接纳为明确状态，过期且未接纳的历史记录保留在本地，不占当前设备视图名额。上位机可通过 USB 或已配对的 WSS 传输。
 
-Windows 上位机统一在 [Tools/Desktop](Tools/Desktop/README.md)，使用 Tauri + React + Microsoft Fluent UI 界面和共享 Python 控制层；旧 Tk 程序已移除。界面参考 WinUI Gallery，模块化布局，设置页提供浅色、深色、跟随系统三张预览卡，切换后记住选择。首页统一选择 USB 串口或已配对 Wi-Fi 设备，支持本地灯光、Codex 监控、诊断、配对管理与设置；六位码 WSS 配对、重连认证及无线灯光/监控已接入隔离实验，用户确认拔掉 USB 后仍可无线控制。验证边界见 [PAIRING.md](Tools/DeviceBridge/PAIRING.md)。完整灯光及跨连接最终输出读回仍待接入。便携包唯一启动入口为 `Tools/Desktop/release/OmiPet/Omi.exe`。新用户通过程序内向导安装采集组件并完成 Codex Hook 信任，步骤见 [快速开始](Tools/Desktop/QUICK_START.md)，源码分层见 [Tools](Tools/README.md)。
+Windows 上位机统一在 [Tools/Desktop](Tools/Desktop/README.md)，使用 Tauri + React + Microsoft Fluent UI 界面和共享 Python 控制层；旧 Tk 程序已移除。界面参考 WinUI Gallery，模块化布局，设置页提供浅色、深色、跟随系统三张预览卡，切换后记住选择。首页统一选择 USB 串口或已配对 Wi-Fi 设备，支持本地灯光、Codex 监控、诊断、配对管理与设置；六位码 WSS 配对、重连认证及无线灯光/监控已接入隔离实验，用户确认拔掉 USB 后仍可无线控制。验证边界见 [PAIRING.md](Tools/DeviceBridge/PAIRING.md)。完整灯光及跨连接最终输出读回仍待接入。便携包唯一启动入口为 `Tools/Desktop/release/Omi/Omi.exe`。新用户通过程序内向导安装采集组件并完成 Codex Hook 信任，步骤见 [快速开始](Tools/Desktop/QUICK_START.md)，源码分层见 [Tools](Tools/README.md)。
 
 USB/Wi-Fi 共用协议与主机工具见 [Tools/DeviceBridge](Tools/DeviceBridge/README.md)。当前支持监控灯效的隔离固件按五种状态读取可配置的颜色、亮度和动效，并保存到 NVS。默认无事件/完成/来源异常绿、运行红、等待操作黄；同一聊天由当前用户任务判定：运行红，当前任务结束且没有本任务待回复问题时绿；旧未结束轮次和背景异步问题保留历史，不再永久覆盖新任务结束。真实审批与其他聊天的等待仍优先。监控断联或租约结束关灯，语音优先，唤醒显示白色跑马灯。监控中禁止上位机手动调灯。协议仍区分 unknown 与 idle，绿色是显示策略，不伪造状态。
 
