@@ -187,7 +187,7 @@ describe('USB desktop', () => {
     bridge.events.push({ kind: 'command', command: 'monitor', ok: true }, monitor());
     await waitFor(() => expect(input.checked).toBe(true));
     await user.click(screen.getByRole('button', { name: '灯光与灯效' }));
-    for (const name of ['应用灯光设置', '选择颜色 #0000FF', '常亮', '扩散灯']) {
+    for (const name of ['应用灯光设置', '选择颜色 #0000FF', '自定义颜色', '常亮', '扩散灯']) {
       expect((screen.getByRole('button', { name }) as HTMLButtonElement).disabled).toBe(true);
     }
     expect((screen.getByRole('slider', { name: '灯光亮度' }) as HTMLInputElement).disabled).toBe(true);
@@ -211,6 +211,23 @@ describe('USB desktop', () => {
       await waitFor(() => expect((screen.getByRole('button', { name: '应用灯光设置' }) as HTMLButtonElement).disabled).toBe(false));
       expect(screen.getByText('设备正在响应语音，请稍后再应用灯光。')).toBeTruthy();
     }
+  });
+
+  it('offers a full palette and applies custom colors only after confirmation', async () => {
+    render(<App />);
+    const user = await connect();
+    await user.click(screen.getByRole('button', { name: '灯光与灯效' }));
+    expect(screen.getAllByRole('button', { name: /^选择颜色 #/ })).toHaveLength(24);
+    const picker = screen.getByLabelText('自定义灯光颜色');
+    const open = vi.spyOn(picker, 'click');
+    await user.click(screen.getByRole('button', { name: '自定义颜色' }));
+    expect(open).toHaveBeenCalledOnce();
+    fireEvent.change(picker, { target: { value: '#123abc' } });
+    const lights = () => bridge.invoke.mock.calls.filter(([, args]) => args.message.action === 'light');
+    expect(lights()).toHaveLength(0);
+    expect((picker as HTMLInputElement).value).toBe('#123abc');
+    await user.click(screen.getByRole('button', { name: '应用灯光设置' }));
+    expect(lights().at(-1)?.[1].message.body).toMatchObject({ red: 18, green: 58, blue: 188 });
   });
 
   it('honors firmware capabilities rather than enabling unsupported controls', async () => {

@@ -94,10 +94,15 @@ p { margin: 0; font-size: 13px; line-height: 1.7; }
 .color-picker input { width: 35px; height: 29px; border: 1px solid var(--line); border-radius: 4px; padding: 2px; background: var(--bg); cursor: pointer; }
 .color-picker.disabled { opacity: .5; }
 .color-picker.disabled input { cursor: default; }
-.swatches { display: flex; align-items: center; flex-wrap: wrap; gap: 15px; padding: 8px 0; }
-.swatches button { border: 1px solid var(--line); width: 25px; height: 25px; border-radius: 50%; padding: 0; cursor: pointer; }
+.swatches { display: grid; grid-template-columns: repeat(8,minmax(0,1fr)); gap: 12px; padding: 8px 4px; }
+.swatches button { border: 1px solid var(--line); width: 100%; aspect-ratio: 1; max-height: 38px; border-radius: 8px; padding: 0; cursor: pointer; }
 .swatches button[aria-pressed=true] { outline: 2px solid var(--accent); outline-offset: 3px; }
 .swatches button:disabled { opacity: .35; cursor: default; }
+.custom-light-color { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.custom-color-trigger { position: relative; display: inline-flex; }
+.custom-color-trigger input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; pointer-events: none; }
+.custom-color-value { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+.custom-color-value i { width: 16px; height: 16px; border: 1px solid var(--line); border-radius: 4px; }
 .effect-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; width: 100%; }
 .effect-grid button { min-width: 0; font-size: 12px; padding-inline: 6px; min-height: 35px; }
 .effect-grid button[aria-pressed=true] { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
