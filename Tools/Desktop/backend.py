@@ -36,6 +36,17 @@ class Backend:
         self.pairing_socket = None
         self.pairing_stop = threading.Event()
         self.connected = self.busy = False
+        self.monitor_watcher = None
+
+    def watch_monitor(self):
+        try:
+            from monitor_setup import MonitorSetup
+            setup = MonitorSetup()
+            result = setup.auto_update()
+        except Exception:
+            result = dict(state="manual-update", message="自动检查 Codex 监控失败，请到设置重新检测并修复监控。")
+        if result:
+            self.events.put(dict(kind="monitor-setup", update=result))
 
     def ports(self):
         if self.demo:
@@ -68,10 +79,16 @@ class Backend:
             #  等待原工作线程完成既有释放流程，不增加另一套超时 / Wait for the existing worker release flow without introducing another timeout
             self.worker.join()
             self.worker = None
+        if self.monitor_watcher:
+            self.monitor_watcher.join()
+            self.monitor_watcher = None
 
     def dispatch(self, action, body):
         if action == "init":
             root = default_monitor_root()
+            if not self.demo and self.monitor_watcher is None:
+                self.monitor_watcher = threading.Thread(target=self.watch_monitor, name="omi-monitor-update")
+                self.monitor_watcher.start()
             return dict(demo=self.demo, root=str(root), bindings=str(root / "host-bindings.json"), ports=self.ports())
         if action == "ports":
             return self.ports()
@@ -79,7 +96,10 @@ class Backend:
             from monitor_setup import MonitorSetup
             setup = MonitorSetup()
             if action == "monitor-setup-status":
-                return setup.status()
+                status = setup.status()
+                if status["state"] == "ready":
+                    self.events.put(dict(kind="monitor-setup", update=None))
+                return status
             if self.demo or self.connected or self.busy or self.worker and self.worker.is_alive():
                 raise ValueError("请断开设备后配置监控；演示模式不修改 Codex 配置。")
             if action == "monitor-setup-install":

@@ -58,7 +58,8 @@ export function MonitorSetup({ device, completed, firstRun = false }: { device: 
       <Field label="允许关联的 Codex 程序"><Input value={images.join('；')} readOnly placeholder="尚未检测到，请启动 Codex 或选择程序" /></Field>
       <div className="button-row"><Button disabled={!editable} onClick={() => void browse()}>选择 Codex 程序</Button>
         <Button appearance="primary" disabled={!editable || !status?.packaged || !images.length} onClick={() => void apply('monitor-setup-install')}>{status?.images ? '修复 / 更新监控' : '安装监控组件'}</Button></div>
-      <p>点击安装会备份并合并用户级 Hook，替换可明确识别的旧 Omi 采集器，保留其他工具的配置。组件存放在固定目录，移动本软件不影响采集。</p></li>
+      <p>点击安装会备份并合并用户级 Hook，替换可明确识别的旧 Omi 采集器，保留其他工具的配置。组件存放在固定目录，移动本软件不影响采集。</p>
+      <p>每次启动 Omi 时会自动检查 Codex 版本目录变化。同一安装位置只有一个新版本正在运行时，会备份并更新监控，提示你重新审查信任；完成后点击重新检测监控。多个版本或校验异常时，请在此手动处理。</p></li>
       <li><h3>在 Codex 中审查并信任 Hook</h3><p>在 Codex 的 Hook 审查界面信任 Omi 处理器；CLI 可输入 <code>/hooks</code>。若未出现新定义，请重新加载配置或重启 Codex。修复或升级后如提示定义变化，请重新审查。</p></li>
       <li><h3>发送一条消息，验证接入</h3><p>让 Codex 执行一次普通操作，然后点击重新检测。只有收到真实事件且宿主关联正常，才显示就绪。</p>
         <Button disabled={!device.ready || pending} onClick={() => void refresh()}>重新检测监控</Button></li></ol>

@@ -184,7 +184,47 @@ class MonitorSetup:
         with monitor_lock(self.home / "omi-setup"):
             return self._install(images)
 
-    def _install(self, images):
+    def auto_update(self):
+        with monitor_lock(self.home / "omi-setup"):
+            receipt = self.owned()
+            if not receipt:
+                return None
+            candidates = [Path(p).resolve() for p in codex_images() if Path(p).is_file()]
+            images = list(receipt["images"])
+            changed = False
+            for index, image in enumerate(images):
+                old = Path(image).resolve()
+                if old in candidates:
+                    continue
+                if (old.name.lower() != "codex.exe" or not re.fullmatch(r"[a-fA-F0-9]{16}", old.parent.name)
+                        or old.parent.parent.name.lower() != "bin"):
+                    continue
+                matches = [p for p in candidates if p.parent.parent == old.parent.parent
+                           and re.fullmatch(r"[a-fA-F0-9]{16}", p.parent.name)]
+                if len(matches) > 1:
+                    return dict(state="manual-update", message="检测到多个 Codex 版本，请到设置选择需要监控的程序。")
+                if matches:
+                    images[index] = str(matches[0])
+                    changed = True
+            if changed:
+                status = self.status()
+                if not status.get("installed"):
+                    return dict(state="manual-update", message="检测到 Codex 路径变化，但监控配置或组件校验异常，请到设置修复。")
+                if any(not Path(p).is_file() for p in images):
+                    return dict(state="manual-update", message="检测到 Codex 路径变化，其他已选程序不可用，请到设置确认程序列表。")
+                runtime = self.runtime
+                try:
+                    self.runtime = Path(receipt["runtime"])
+                    result = self._install(sorted(set(images)), automatic=True)
+                finally:
+                    self.runtime = runtime
+                return dict(result, state="awaiting-event")
+            if receipt.get("automaticUpdate"):
+                status = self.status()
+                return dict(state=status["state"], message=status["message"])
+            return None
+
+    def _install(self, images, automatic=False):
         if not self.runtime or not (self.runtime / "omi-device.exe").is_file():
             raise ValueError("请使用完整解压后的 Windows 发行包安装监控。")
         if (not isinstance(images, list) or not images or len(images) > 8
@@ -225,11 +265,13 @@ class MonitorSetup:
             configuration.setdefault("hooks", {}).setdefault(event, []).append(dict(hooks=[handler]))
         receipt = dict(schema=1, home=str(self.home.resolve()), installationId=installation,
                        runtime=str(destination.resolve()), files=files, handlers=handlers, images=images,
+                       automaticUpdate=automatic,
                        previousRuntimes=old.get("previousRuntimes", []) + [dict(
                            installationId=old["installationId"], files=old["files"])] if old else [])
         backup = self.commit(configuration, receipt, before)
         return dict(backup=backup, root=str(self.root), bindings=str(self.root / "host-bindings.json"),
-                    message="监控组件已安装。请在 Codex 审查并信任 Omi Hook，再发送一条消息并重新检测。")
+                    message=("检测到 Codex 版本目录变化，已备份并自动更新监控。请在 Codex 审查并信任新 Omi Hook；若未出现，请重新加载配置或重启 Codex，再执行一次普通工具操作。"
+                             if automatic else "监控组件已安装。请在 Codex 审查并信任 Omi Hook，再发送一条消息并重新检测。"))
 
     def uninstall(self):
         with monitor_lock(self.home / "omi-setup"):
@@ -301,7 +343,9 @@ class MonitorSetup:
             result["installed"] = True
             marker = read_json(self.root / "hook-receipt.json", {})
             if marker.get("installationId") != receipt["installationId"]:
-                return dict(result, state="awaiting-event", message="已配置，等待信任和新事件；安装成功不代表 Hook 已受信任。")
+                return dict(result, state="awaiting-event", message=(
+                    "Codex 版本目录已自动更新。请在 Codex 审查并信任新 Omi Hook；若未出现，请重新加载配置或重启 Codex，再执行一次普通工具操作。"
+                    if receipt.get("automaticUpdate") else "已配置，等待信任和新事件；安装成功不代表 Hook 已受信任。"))
             result["hookReceived"] = True
             view = LifecycleReader(self.root, self.root / "host-bindings.json", max_age_seconds=30)()
             if any(e.get("sessionId") == marker.get("sessionId") and e.get("hostProcessState") == "running"

@@ -64,6 +64,8 @@ p { margin: 0; font-size: 13px; line-height: 1.7; }
 .port-row select { text-overflow: ellipsis; }
 .button-row { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
 .button-row>button { flex-shrink: 0; }
+.monitor-update-notice { margin-bottom: 16px; }
+.monitor-update-notice .button-row { justify-content: flex-end; margin-top: 16px; }
 .connection-controls .button-row>button { flex: 1; }
 .endpoint { overflow-wrap: anywhere; margin-bottom: 16px; }
 .mode-list { display: grid; gap: 1px; }

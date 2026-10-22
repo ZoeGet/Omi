@@ -3,9 +3,10 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import threading
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 BACKEND = Path(__file__).resolve().parents[1] / "backend.py"
 spec = importlib.util.spec_from_file_location("tauri_backend", BACKEND)
@@ -14,6 +15,65 @@ spec.loader.exec_module(module)
 
 
 class BackendTests(unittest.TestCase):
+    def test_close_releases_device_before_waiting_for_startup_check(self):
+        finish_check = threading.Event()
+        released = threading.Event()
+        self.backend.monitor_watcher = threading.Thread(target=finish_check.wait)
+        self.backend.monitor_watcher.start()
+        self.backend.worker = Mock()
+        self.backend.worker.stop.side_effect = released.set
+        closing = threading.Thread(target=self.backend.close)
+        closing.start()
+        try:
+            self.assertTrue(released.wait(1), "Startup check must not delay device release")
+        finally:
+            finish_check.set()
+            closing.join(5)
+        self.assertFalse(closing.is_alive())
+
+    def test_startup_check_runs_once_and_demo_never_starts_it(self):
+        with patch.object(self.backend, "watch_monitor") as check:
+            self.request("init")
+            check.assert_not_called()
+            self.backend.demo = False
+            with patch.object(self.backend, "ports", return_value=[]):
+                self.request("init")
+                self.backend.monitor_watcher.join()
+                self.request("init")
+            check.assert_called_once()
+
+    def test_explicit_ready_check_clears_update_reminder(self):
+        with patch("monitor_setup.MonitorSetup") as setup:
+            setup.return_value.status.return_value = dict(state="awaiting-binding")
+            self.request("monitor-setup-status")
+            self.assertFalse(any(e["kind"] == "monitor-setup" for e in self.received))
+            setup.return_value.status.return_value = dict(state="ready")
+            self.request("monitor-setup-status")
+            self.assertIn(dict(kind="monitor-setup", update=None), self.received)
+
+    def test_monitor_watcher_reports_updates_without_touching_device(self):
+        self.backend.demo = False
+        self.backend.connected = True
+        result = dict(state="awaiting-event", message="请信任新 Hook")
+        with patch("monitor_setup.MonitorSetup") as setup:
+            setup.return_value.auto_update.return_value = result
+            self.backend.watch_monitor()
+            setup.return_value.auto_update.assert_called_once()
+            event = self.backend.events.drain()[0]
+            self.assertEqual(event, dict(kind="monitor-setup", update=result))
+            self.assertTrue(self.backend.connected)
+            self.assertIsNone(self.backend.worker)
+
+    def test_monitor_watcher_failure_is_actionable_and_does_not_stop_backend(self):
+        with patch("monitor_setup.MonitorSetup") as setup:
+            for construction_fails in (False, True):
+                setup.side_effect = OSError("private details") if construction_fails else None
+                setup.return_value.auto_update.side_effect = OSError("private details")
+                self.backend.watch_monitor()
+                event = self.backend.events.drain()[0]
+                self.assertEqual(event["update"]["state"], "manual-update")
+                self.assertNotIn("private", event["update"]["message"])
+
     def test_pairing_inspection_is_read_only_explicit_and_reports_safe_state(self):
         self.backend.demo = False
         with patch('wireless_pairing.inspect_pairing', return_value='repair-required') as inspect:

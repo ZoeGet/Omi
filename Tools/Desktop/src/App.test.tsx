@@ -38,6 +38,20 @@ beforeEach(() => {
 });
 
 describe('USB desktop', () => {
+  it('keeps the automatic update trust reminder visible until live verification succeeds', async () => {
+    localStorage.setItem('omi.monitorSetup.dismissed', '1');
+    render(<App />);
+    const user = await connect();
+    bridge.events.push({ kind: 'monitor-setup', update: { state: 'awaiting-event', message: '请在 Codex 信任新 Hook' } });
+    await screen.findByRole('heading', { name: 'Codex 监控需要确认' });
+    await user.click(screen.getByRole('button', { name: '查看监控设置' }));
+    expect(screen.getByRole('heading', { name: '设置', level: 1 })).toBeTruthy();
+    bridge.events.push(status(), { kind: 'monitor-setup', update: { state: 'awaiting-binding', message: '等待真实宿主关联' } });
+    await screen.findAllByText('等待真实宿主关联');
+    expect(screen.getByRole('heading', { name: 'Codex 监控需要确认' })).toBeTruthy();
+    bridge.events.push({ kind: 'monitor-setup', update: { state: 'ready', message: '宿主关联正常' } });
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'Codex 监控需要确认' })).toBeNull());
+  });
   it('restores the last endpoint at startup and keeps manual disconnect disabled across restarts', async () => {
     localStorage.setItem('omi.lastConnection', JSON.stringify({ port: 'COM17', transport: 'usb', enabled: true }));
     const view = render(<App />);

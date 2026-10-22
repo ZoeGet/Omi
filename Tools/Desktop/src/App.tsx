@@ -72,6 +72,10 @@ export function Desktop({ device, appearance: { dark, theme, preference, setPref
         </div></header>
         <main key={page} id="page-content"><div className="page-heading"><div><h1>{heading.title}</h1><p>{heading.caption}</p></div>
           {page !== 'pairing' && <span className="policy-label"><ShieldCheckmark20Regular />{device.demo ? '模拟设备' : '语音优先'}</span>}</div>
+          {device.monitorUpdate && device.monitorUpdate.state !== 'ready' && <section role="alert" className="card monitor-update-notice">
+            <h2>Codex 监控需要确认</h2><p>{device.monitorUpdate.message}</p>
+            <div className="button-row"><Button onClick={() => setPage('settings')}>查看监控设置</Button></div>
+          </section>}
           {page === 'overview' && <>{!setupChecked && !device.demo && <MonitorSetup device={device} firstRun completed={dismissSetup} />}<Overview device={device} light={light} navigate={setPage} /></>}
           {page === 'lights' && <LocalLights device={device} draft={light} edited={lightEdited} change={value => { setLight(value); setLightEdited(true); }} />}
           {page === 'monitor-lights' && <MonitorLights key={`${device.endpoint}-${device.connected}`} profile={device.snapshot.monitorProfile}

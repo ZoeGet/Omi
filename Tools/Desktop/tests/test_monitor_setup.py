@@ -35,6 +35,75 @@ class SetupTests(unittest.TestCase):
     def install(self):
         return self.setup.install([str(self.image)])
 
+    def version_image(self, version, family="Codex"):
+        image = self.base / family / "bin" / version / "codex.exe"
+        image.parent.mkdir(parents=True, exist_ok=True)
+        image.write_bytes(b"test codex")
+        return image
+
+    def test_auto_update_replaces_only_same_family_and_preserves_other_hooks(self):
+        old = self.version_image("a" * 16)
+        new = self.version_image("b" * 16)
+        self.setup.install([str(old), str(self.image)])
+        before = self.setup.hooks.read_bytes()
+        receipt = self.setup.owned()
+        old.unlink()
+        with patch("monitor_setup.codex_images", return_value=[str(new), str(self.image)]):
+            result = self.setup.auto_update()
+            updated = self.setup.owned()
+            self.assertEqual(result["state"], "awaiting-event")
+            self.assertIn("信任", result["message"])
+            self.assertEqual({Path(p) for p in updated["images"]}, {new, self.image})
+            self.assertNotEqual(updated["installationId"], receipt["installationId"])
+            self.assertEqual((Path(result["backup"]) / "hooks.json").read_bytes(), before)
+            self.assertEqual(read_json(self.setup.hooks)["hooks"]["Stop"][0], self.other["hooks"]["Stop"][0])
+            self.assertTrue(updated["automaticUpdate"])
+            self.assertEqual(self.setup.auto_update()["state"], "awaiting-event")
+            self.assertEqual(self.setup.owned(), updated)
+            self.setup.root.mkdir(exist_ok=True)
+            (self.setup.root / "hook-receipt.json").write_text(json.dumps(dict(
+                installationId=updated["installationId"], sessionId="current")), encoding="utf-8")
+            with patch("monitor_setup.LifecycleReader") as reader:
+                reader.return_value.return_value = dict(sessions=[dict(
+                    sessionId="current", hostProcessState="running", reason="observed-lifecycle")])
+                self.assertEqual(self.setup.auto_update()["state"], "ready")
+
+    def test_auto_update_does_not_install_or_guess_unrelated_or_multiple_versions(self):
+        old = self.version_image("a" * 16)
+        new = self.version_image("b" * 16)
+        other = self.version_image("c" * 16, "Unrelated")
+        with patch("monitor_setup.codex_images", return_value=[str(new)]):
+            self.assertIsNone(self.setup.auto_update())
+        self.setup.install([str(old)])
+        before = self.setup.hooks.read_bytes()
+        for candidates in ([], [str(other)], [str(old), str(new)]):
+            with patch("monitor_setup.codex_images", return_value=candidates):
+                self.assertIsNone(self.setup.auto_update())
+            self.assertEqual(self.setup.hooks.read_bytes(), before)
+        another = self.version_image("d" * 16)
+        with patch("monitor_setup.codex_images", return_value=[str(new), str(another)]):
+            self.assertEqual(self.setup.auto_update()["state"], "manual-update")
+        self.assertEqual(self.setup.hooks.read_bytes(), before)
+
+    def test_auto_update_stops_on_corruption_or_modified_hooks(self):
+        old = self.version_image("a" * 16)
+        new = self.version_image("b" * 16)
+        self.setup.install([str(old)])
+        before = self.setup.hooks.read_bytes()
+        exe = Path(self.setup.owned()["runtime"]) / "omi-device.exe"
+        exe.write_bytes(b"modified")
+        with patch("monitor_setup.codex_images", return_value=[str(new)]):
+            self.assertEqual(self.setup.auto_update()["state"], "manual-update")
+        self.assertEqual(self.setup.hooks.read_bytes(), before)
+        self.setup.install([str(old)])
+        configuration = read_json(self.setup.hooks)
+        configuration["hooks"]["Stop"][-1]["hooks"][0]["timeout"] = 99
+        self.setup.hooks.write_text(json.dumps(configuration), encoding="utf-8")
+        before = self.setup.hooks.read_bytes()
+        with patch("monitor_setup.codex_images", return_value=[str(new)]):
+            self.assertEqual(self.setup.auto_update()["state"], "manual-update")
+        self.assertEqual(self.setup.hooks.read_bytes(), before)
+
     def test_install_repair_preserve_others_backup_and_independent_runtime(self):
         original = self.setup.hooks.read_bytes()
         reply = self.install()

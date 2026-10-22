@@ -5,6 +5,7 @@ export type Light = { effect: string; red: number; green: number; blue: number; 
 export type Port = { device: string; description: string };
 export type Settings = { port: string; root: string; bindings: string };
 export type MonitorProfile = { revision: number; profiles: Record<string, Light> };
+export type MonitorUpdate = { state: string; message: string };
 type RequestBody = Settings | Light | MonitorProfile | { address: string; code?: string; previous?: string } | { images: string[] } | null;
 export type Snapshot = {
   monitorSource?: { state: string; reasons: string[] }; taskScreenSupported?: boolean;
@@ -19,6 +20,7 @@ export type WorkerEvent = Partial<Snapshot> & {
   transport?: 'usb' | 'wifi';
   attempt?: number; delay?: number;
   pairingState?: string;
+  update?: MonitorUpdate | null;
 };
 type Reply = { ok: boolean; result?: unknown; error?: string; events: WorkerEvent[] };
 type State = {
@@ -27,6 +29,7 @@ type State = {
   transport?: 'usb' | 'wifi'; endpoint?: string;
   reconnecting?: boolean; connectionError?: string; lightResult?: 'pending' | 'failed' | 'confirmed';
   pairingInspection?: { address: string; state: string };
+  monitorUpdate?: MonitorUpdate | null;
 };
 export const pairingStatusText: Record<string, string> = {
   new: '设备报告尚未绑定，可输入屏幕上的六位码完成首次配对。',
@@ -71,6 +74,10 @@ function log(state: State, text: string): State {
 export function applyEvents(state: State, events: WorkerEvent[]): State {
   for (const event of events) {
     switch (event.kind) {
+      case 'monitor-setup':
+        state = { ...state, monitorUpdate: event.update };
+        if (event.update) state = log(state, event.update.message);
+        break;
       case 'connected':
         state = log({ ...state, connected: true, busy: false, reconnecting: false, connectionError: undefined, lightResult: undefined,
           snapshot: {}, transport: event.transport ?? 'usb', endpoint: event.port }, `已连接 ${event.port}，设备握手成功。`);
