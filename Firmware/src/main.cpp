@@ -725,15 +725,7 @@ void setup() {
 
   //  初始化 Wi-Fi；无已保存配置时开启网页配网热点 / Initialize Wi-Fi; start the web portal when no saved configuration exists
   OmiPetNetwork::wifi.begin();
-  OmiPetTime::ntp.update(OmiPetNetwork::wifi.connected());
-  const OmiPetTime::DateTime initialDateTime = OmiPetTime::ntp.current();
-  OmiPetUi::setDateTime(initialDateTime.valid, initialDateTime.year,
-                        initialDateTime.month, initialDateTime.day,
-                        initialDateTime.hour, initialDateTime.minute);
-  const String initialWifiSsid = OmiPetNetwork::wifi.ssid();
-  OmiPetUi::setNetworkStatus(OmiPetNetwork::wifi.connected(),
-                             OmiPetNetwork::wifi.provisioning(),
-                             initialWifiSsid.c_str());
+  refreshNetworkAndTimeUi();
   //  初始化麦克风采集诊断 / Initialize the microphone capture diagnostic
   //  当前硬件使用右声道槽 / The current hardware uses the right I2S slot
   const bool microphoneReady = OmiPetAudio::microphone.begin(
@@ -762,7 +754,6 @@ void loop() {
 #if OMIPET_WIFI_PAIRING
   OmiPetPairing::updateWirelessPairing(OmiPetNetwork::wifi.connected());
 #endif
-  refreshNetworkAndTimeUi();
   //  先推进灯效，避免语音识别处理占用主循环时延后动画刷新 / Advance effects first so speech processing delays animation refresh less
 #if OMIPET_MONITOR_LIGHTS
   if (gWakeLightActive) gWakeEffects.update();
@@ -794,9 +785,20 @@ void loop() {
   refreshNetworkAndTimeUi();
   //  每 5 秒读取一次温湿度，降低传感器自热和总线占用 / Read every 5 seconds to reduce sensor self-heating and bus usage
   static uint32_t lastSensorReadMs = millis();
+  bool sensorUpdated = false;
   if (millis() - lastSensorReadMs >= 5000U) {
     lastSensorReadMs = millis();
+#if OMIPET_AHT20_ASYNC
+    sensorUpdated = !OmiPetSensor::aht20.startMeasurement();
+#else
     OmiPetSensor::aht20.readMeasurement();
+    sensorUpdated = true;
+#endif
+  }
+#if OMIPET_AHT20_ASYNC
+  sensorUpdated = OmiPetSensor::aht20.updateMeasurement() || sensorUpdated;
+#endif
+  if (sensorUpdated) {
     const OmiPetSensor::Aht20Measurement& reading =
         OmiPetSensor::aht20.measurement();
     OmiPetUi::setEnvironment(reading.temperatureC, reading.humidityPercent,

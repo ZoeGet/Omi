@@ -40,6 +40,8 @@ class WifiManagerService {
   struct SavedNetworks { uint32_t version = 1; Network entries[5] = {}; } saved_;
   void rememberNetwork(const String& ssid, const String& password);
   void tryNextNetwork();
+  //  共用门户启动动作，保留各调用方的触发条件 / Share portal startup while retaining each caller's trigger conditions
+  void startPortal();
   size_t networkCount() const;
   Preferences preferences_;
   bool storageReady_ = false;

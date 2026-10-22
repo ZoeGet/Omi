@@ -265,11 +265,7 @@ void EffectController::setRainbow() {
 //  切换到纯蓝色呼吸动效 / Switch to the pure-blue breathing effect
 void EffectController::setBreathe() {
   //  进入呼吸灯时使用纯蓝色；之后的颜色命令仍可保留呼吸动效并切换颜色 / Start breathing in pure blue; later color commands keep the effect and change its color
-  red_ = kBreatheRed;
-  green_ = kBreatheGreen;
-  blue_ = kBreatheBlue;
-  selectMode(EffectMode::Breathe);
-  render(millis(), true);
+  setConfiguration(EffectMode::Breathe, kBreatheRed, kBreatheGreen, kBreatheBlue);
 }
 
 //  切换到带固定底光的纯绿色左右追逐动效 / Switch to the pure-green left-right sweep with fixed base light
@@ -280,11 +276,7 @@ void EffectController::setSweep() {
 
 //  以指定颜色立即开始左右往返跑马灯 / Start the left-right sweep immediately in the requested color
 void EffectController::setSweep(uint8_t red, uint8_t green, uint8_t blue) {
-  red_ = red;
-  green_ = green;
-  blue_ = blue;
-  selectMode(EffectMode::Sweep);
-  render(millis(), true);
+  setConfiguration(EffectMode::Sweep, red, green, blue);
 }
 
 //  切换到带固定底光的纯红色中心向外扩散动效 / Switch to the pure-red center-out expansion with fixed base light
@@ -295,11 +287,7 @@ void EffectController::setCenterExpand() {
 
 //  以指定颜色立即开始中心扩散 / Start center expansion immediately with the requested color
 void EffectController::setCenterExpand(uint8_t red, uint8_t green, uint8_t blue) {
-  red_ = red;
-  green_ = green;
-  blue_ = blue;
-  selectMode(EffectMode::CenterExpand);
-  render(millis(), true);
+  setConfiguration(EffectMode::CenterExpand, red, green, blue);
 }
 
 //  切换到关灯模式并立即发送黑帧 / Switch to off mode and send a black frame immediately

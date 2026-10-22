@@ -3,6 +3,14 @@
 #include <Arduino.h>
 #include <Wire.h>
 
+//  分步采样仅用于隔离验证，默认保留同步路径 / Staged sampling is for isolated validation; preserve the synchronous path by default
+#ifndef OMIPET_AHT20_ASYNC
+#define OMIPET_AHT20_ASYNC 0
+#endif
+#if OMIPET_AHT20_ASYNC != 0 && OMIPET_AHT20_ASYNC != 1
+#error "OMIPET_AHT20_ASYNC must be 0 or 1"
+#endif
+
 namespace OmiPetSensor {
 
 //  AHT20 默认 I2C 地址和项目硬件引脚 / AHT20 default I2C address and project hardware pins
@@ -50,6 +58,13 @@ class Aht20Sensor {
   //  触发并读取一次测量 / Trigger and read one measurement
   bool readMeasurement();
 
+#if OMIPET_AHT20_ASYNC
+  //  开始分步测量，忙碌时不覆盖当前转换 / Start a staged measurement without replacing an active conversion
+  bool startMeasurement();
+  //  转换等待期间立即返回，成功或失败完成时返回 true；故障恢复沿用同步路径 / Return immediately while converting, true on completion or failure; fault recovery remains synchronous
+  bool updateMeasurement();
+#endif
+
   //  获取最近一次测量 / Get the most recent measurement
   const Aht20Measurement& measurement() const;
 
@@ -75,6 +90,8 @@ class Aht20Sensor {
   bool waitUntilReady(uint32_t timeoutMs);
   //  读取指定长度的数据帧 / Read a data frame of the requested length
   bool readFrame(uint8_t* frame, size_t length);
+  //  同步与分步测量共用读取、校验和补偿 / Share frame reading, validation, and compensation between both sampling paths
+  bool finishMeasurement();
   //  执行传感器软复位并重新校准 / Perform a sensor soft reset and recalibration
   bool softReset();
   //  记录错误并保留最近一次有效数据 / Record an error while retaining the last valid data
@@ -94,6 +111,13 @@ class Aht20Sensor {
   uint32_t consecutiveFailures_ = 0;
   uint32_t lastRecoveryMs_ = 0;
   bool initialized_ = false;
+  bool recovering_ = false;  //  防止恢复错误再次递归触发恢复 / Prevent recovery errors from recursively starting recovery
+#if OMIPET_AHT20_ASYNC
+  enum class MeasurementPhase : uint8_t { Idle, StartDelay, Converting };
+  MeasurementPhase phase_ = MeasurementPhase::Idle;
+  uint32_t phaseStartedAtMs_ = 0;
+  uint32_t lastPollAtMs_ = 0;
+#endif
 };
 
 extern Aht20Sensor aht20;

@@ -31,6 +31,10 @@ bool Aht20Sensor::begin(TwoWire& wire, uint8_t sda, uint8_t scl,
   sclPin_ = scl;
   frequency_ = frequency;
   initialized_ = false;
+  recovering_ = false;
+#if OMIPET_AHT20_ASYNC
+  phase_ = MeasurementPhase::Idle;
+#endif
   consecutiveFailures_ = 0;
   measurement_ = Aht20Measurement{};
   clearError();
@@ -52,6 +56,9 @@ bool Aht20Sensor::begin(TwoWire& wire, uint8_t sda, uint8_t scl,
 
 //  触发一次测量，校验数据并更新最近一次温湿度结果 / Trigger one measurement, validate it, and update the latest reading
 bool Aht20Sensor::readMeasurement() {
+#if OMIPET_AHT20_ASYNC
+  if (phase_ != MeasurementPhase::Idle) return false;
+#endif
   if (!initialized_ || wire_ == nullptr) {
     return fail(Aht20Error::NotInitialized);
   }
@@ -67,7 +74,55 @@ bool Aht20Sensor::readMeasurement() {
   if (!waitUntilReady(kMeasurementTimeoutMs)) {
     return false;
   }
+  return finishMeasurement();
+}
 
+#if OMIPET_AHT20_ASYNC
+bool Aht20Sensor::startMeasurement() {
+  if (phase_ != MeasurementPhase::Idle) return false;
+  if (!initialized_ || wire_ == nullptr) return fail(Aht20Error::NotInitialized);
+  clearError();
+  phase_ = MeasurementPhase::StartDelay;
+  phaseStartedAtMs_ = millis();
+  return true;
+}
+
+bool Aht20Sensor::updateMeasurement() {
+  if (phase_ == MeasurementPhase::Idle) return false;
+  const uint32_t nowMs = millis();
+  const uint32_t elapsedMs = nowMs - phaseStartedAtMs_;
+  if (phase_ == MeasurementPhase::StartDelay) {
+    if (elapsedMs < kMeasurementStartDelayMs) return false;
+    if (!sendCommand(kMeasureCommand, sizeof(kMeasureCommand))) {
+      phase_ = MeasurementPhase::Idle;
+      return true;
+    }
+    phase_ = MeasurementPhase::Converting;
+    phaseStartedAtMs_ = millis();
+    lastPollAtMs_ = phaseStartedAtMs_;
+    return false;
+  }
+  if (elapsedMs < kMeasurementConversionDelayMs) return false;
+  if (elapsedMs >= kMeasurementConversionDelayMs + kMeasurementTimeoutMs) {
+    phase_ = MeasurementPhase::Idle;
+    fail(Aht20Error::BusyTimeout);
+    return true;
+  }
+  if (nowMs - lastPollAtMs_ < kMeasurementPollIntervalMs) return false;
+  lastPollAtMs_ = nowMs;
+  uint8_t status = 0;
+  if (!readStatus(status)) {
+    phase_ = MeasurementPhase::Idle;
+    return true;
+  }
+  if ((status & kStatusBusyMask) != 0) return false;
+  phase_ = MeasurementPhase::Idle;
+  finishMeasurement();
+  return true;
+}
+#endif
+
+bool Aht20Sensor::finishMeasurement() {
   //  读取状态、湿度、温度和 CRC 共 7 个字节 / Read 7 bytes containing status, humidity, temperature, and CRC
   uint8_t frame[7] = {};
   if (!readFrame(frame, sizeof(frame))) {
@@ -252,10 +307,16 @@ bool Aht20Sensor::fail(Aht20Error error) {
   ++consecutiveFailures_;
 
   const uint32_t nowMs = millis();
-  if (consecutiveFailures_ >= kRecoveryFailureThreshold &&
+  if (wire_ != nullptr && !recovering_ && consecutiveFailures_ >= kRecoveryFailureThreshold &&
       nowMs - lastRecoveryMs_ >= kRecoveryIntervalMs) {
     lastRecoveryMs_ = nowMs;
-    softReset();
+    recovering_ = true;
+    if (softReset()) {
+      //  恢复初始化资格，但本次失败读数仍保持过期 / Restore initialization eligibility while leaving the failed reading stale
+      initialized_ = true;
+      consecutiveFailures_ = 0;
+    }
+    recovering_ = false;
   }
   return false;
 }

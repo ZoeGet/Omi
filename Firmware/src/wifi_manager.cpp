@@ -81,6 +81,17 @@ bool WifiManagerService::begin() {
   return connected();
 }
 
+//  统一门户启动后的状态和日志 / Keep portal startup state and logging consistent
+void WifiManagerService::startPortal() {
+  lastPortalAttemptMs_ = millis();
+  manager_.startConfigPortal(kProvisioningSsid, kProvisioningPassword);
+  portalStarted_ = manager_.getConfigPortalActive();
+  provisioning_ = portalStarted_;
+  Serial.printf("[WIFI] config portal active=%s ap_ip=%s ssid=%s\n",
+                portalStarted_ ? "yes" : "no", WiFi.softAPIP().toString().c_str(),
+                kProvisioningSsid);
+}
+
 //  驱动连接重试和配网状态机 / Advance connection retries and the provisioning state machine
 void WifiManagerService::update() {
   if (!initialized_) {
@@ -120,14 +131,8 @@ void WifiManagerService::update() {
   if (!everConnected_ &&
       millis() - connectStartedAtMs_ >= (networkCount() ? networkCount() * kWifiConnectTimeoutSeconds * 1000U : kInitialWifiConnectWindowMs) &&
       (lastPortalAttemptMs_ == 0 || millis() - lastPortalAttemptMs_ >= kProvisioningTimeoutSeconds * 1000U)) {
-    lastPortalAttemptMs_ = millis();
     //  超时后才启动门户，避免启动阶段被 Wi-Fi 连接阻塞 / Start the portal only after timeout so Wi-Fi cannot block startup
-    manager_.startConfigPortal(kProvisioningSsid, kProvisioningPassword);
-    portalStarted_ = manager_.getConfigPortalActive();
-    provisioning_ = portalStarted_;
-    Serial.printf("[WIFI] config portal active=%s ap_ip=%s ssid=%s\n",
-                  portalStarted_ ? "yes" : "no", WiFi.softAPIP().toString().c_str(),
-                  kProvisioningSsid);
+    startPortal();
     return;
   }
 
@@ -140,14 +145,8 @@ void WifiManagerService::update() {
 
     if (nowMs - disconnectedAtMs_ >= kWifiReconnectGracePeriodMs &&
         (lastPortalAttemptMs_ == 0 || nowMs - lastPortalAttemptMs_ >= kProvisioningTimeoutSeconds * 1000U)) {
-      lastPortalAttemptMs_ = nowMs;
       //  重连超时后开启配网门户 / Start provisioning after the reconnect grace period expires
-      manager_.startConfigPortal(kProvisioningSsid, kProvisioningPassword);
-      portalStarted_ = manager_.getConfigPortalActive();
-      provisioning_ = portalStarted_;
-      Serial.printf("[WIFI] config portal active=%s ap_ip=%s ssid=%s\n",
-                    portalStarted_ ? "yes" : "no", WiFi.softAPIP().toString().c_str(),
-                    kProvisioningSsid);
+      startPortal();
       return;
     }
 
