@@ -7,6 +7,7 @@ from pathlib import Path
 import time
 
 from process_probe import check as check_process
+from process_probe import valid_identity
 from collector import monitor_lock
 
 
@@ -118,6 +119,8 @@ def read_bound_view(root, bindings, *, process_checker=check_process,
         current_monotonic_ns = None
     if correlated and current_monotonic_ns is not None:
         result["evaluatedAtMonotonicNs"] = str(current_monotonic_ns)
+    #  只在本轮共享完整进程身份的查询结果，事件证明仍逐项校验 / Share full process-identity queries only within this evaluation; validate every event proof separately
+    process_evidence = {}
     for entry in result["sessions"]:
         record = bindings["sessions"].get(entry["sessionId"])
         if record is None:
@@ -153,7 +156,13 @@ def read_bound_view(root, bindings, *, process_checker=check_process,
             identity = record.get("identity")
         else:
             identity = record
-        evidence = process_checker(identity)
+        key = tuple(identity[name] for name in ("pid", "creationTime100ns", "imagePath")) if valid_identity(identity) else None
+        if key is None:
+            evidence = process_checker(identity)
+        else:
+            if key not in process_evidence:
+                process_evidence[key] = process_checker(identity)
+            evidence = process_evidence[key]
         entry["hostProcessState"] = evidence["processState"]
         if evidence["processState"] != "running":
             entry.update(displayStatus="unknown", reason="bound-process-unconfirmed")

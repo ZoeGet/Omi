@@ -26,6 +26,50 @@ def snapshot(*sessions):
 
 
 class StateViewTests(unittest.TestCase):
+    def test_shared_process_query_keeps_identity_proof_and_evaluation_boundaries(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            identity = dict(pid=123, creationTime100ns="456", imagePath="C:/synthetic/codex.exe")
+            identities = [identity, dict(identity), dict(identity, creationTime100ns="457"),
+                          dict(identity, imagePath="C:/other/codex.exe"), identity]
+            observed = [dict(session(session_id=str(i)), turnId="", toolUseId="") for i in range(5)]
+            (root / "snapshot.json").write_text(json.dumps(snapshot(*observed)), encoding="utf-8")
+            records = {s["sessionId"]: dict(identity=host, confirmed=True, observedMonotonicNs="1000000000",
+                proof={k: s[k] for k in ("updatedAtUtc", "lastEvent", "turnId", "toolUseId")})
+                for s, host in zip(observed, identities)}
+            records["4"]["proof"]["turnId"] = "unmatched"
+            calls = []
+            state = "running"
+            def check(host):
+                calls.append(host)
+                return dict(processState=state)
+            def read():
+                return view.read_bound_view(root, dict(schema=2, sessions=records), now=NOW,
+                                            max_age_seconds=10, monotonic_ns=lambda: 1000000000,
+                                            process_checker=check)
+            result = read()
+            self.assertEqual(calls, [identities[0], identities[2], identities[3]])
+            self.assertEqual([s["displayStatus"] for s in result["sessions"]], ["working"] * 4 + ["unknown"])
+            self.assertEqual(result["sessions"][4]["reason"], "event-binding-unconfirmed")
+            state = "exited"
+            result = read()
+            self.assertEqual(len(calls), 6)
+            self.assertTrue(all(s["displayStatus"] == "unknown" for s in result["sessions"]))
+
+    def test_invalid_process_identity_is_not_used_as_a_cache_key(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "snapshot.json").write_text(json.dumps(snapshot(session(), session(session_id="b"))), encoding="utf-8")
+            invalid = dict(pid=[], creationTime100ns={}, imagePath=[])
+            calls = []
+            def check(identity):
+                calls.append(identity)
+                return dict(processState="unknown")
+            result = view.read_bound_view(root, dict(schema=1, sessions={"a": invalid, "b": invalid}),
+                                          now=NOW, max_age_seconds=10, process_checker=check)
+            self.assertEqual(len(calls), 2)
+            self.assertEqual(result["overallStatus"], "unknown")
+
     def evaluate(self, *sessions, budget=None, unavailable=False):
         return view.project(snapshot(*sessions), now=NOW,
                             max_age_seconds=budget, source_unavailable=unavailable)
