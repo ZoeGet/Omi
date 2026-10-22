@@ -4,7 +4,7 @@
 
 ## 使用与连接
 
-完整解压 `release/Omi-Windows-1.0.0.zip` 后运行 `Omi.exe`，保留旁边完整的 `omi-device/`。该目录是内置后台与 Python 环境，不是第二套界面；用户无需安装 Python、Rust 或取得源码。使用步骤见 [QUICK_START.md](QUICK_START.md)。
+从 [Releases](https://github.com/ZoeGet/Omi/releases) 下载便携包，完整解压 `Omi-Windows-1.0.0.zip` 后运行 `Omi.exe`，保留旁边完整的 `omi-device/`。该目录是内置后台与 Python 环境，不是第二套界面；用户无需安装 Python、Rust 或取得源码。使用步骤见 [QUICK_START.md](QUICK_START.md)。
 
 - 首页“设备连接”统一切换 USB / Wi-Fi。USB 选择与刷新串口；Wi-Fi 选择与刷新已保存设备，只有一台可用设备时自动选中，多台时手选。
 - 无线配对页优先显示已保存设备，正常记录只保留“无线连接”“重新查找设备”；未确认或重配待确认时显示“验证连接”。完整地址和手动改地址收进“更多操作”，新配对在独立卡片；已连接时显示原因及“断开当前连接”。
@@ -18,13 +18,13 @@
 - 本地编辑切页保留，并显示未应用、等待设备确认、已应用或未确认；只有当前编辑值匹配本次连接已获 ACK 的设置才显示已应用。这是命令确认记录，不是实时灯光读回；断开、重连或切换控制模式后重新确认，不自动补发灯光。
 - 诊断页保留最近 200 条操作结果及通信统计；音频队列、麦克风与看门狗健康只从 USB 日志观测，无线不提供音频健康日志。
 
-换 Wi-Fi 后可先用原凭据查找/更新地址，也可语音开启新配对：说“老鼠狒狒”，听到确认音后说“开启配对模式”，输入屏幕当前 IP 与新码。换电脑或丢失凭据时，从“配对帮助”进入“重新配对已有设备”，阅读旧凭据失效提示并确认提交。普通重启不开窗；五分钟或五次尝试后可再次用语音开窗。需配套固件与 47 词模型，详见 [PAIRING.md](../DeviceBridge/PAIRING.md)。
-
-每次启动 Omi 时自动检查一次已安装监控所选的 Codex 程序，运行期间不定时扫描。已选 `bin/<16位版本目录>/codex.exe` 不再运行、同一安装位置只有一个其他版本正在运行时，校验组件后自动备份并更新 Omi Hook 与精确路径列表。保留其他 Hook、历史记录及已选的其他程序；不修改 Codex 信任记录。更新后各页面提示用户审查信任新 Hook，必要时重新加载配置或重启 Codex，再执行普通工具操作，点击“重新检测监控”；收到真实事件并确认宿主关联后提示消失。多个新版本、其他已选程序失效、配置或组件校验异常时转为手动处理；自定义程序位置不猜测迁移。Omi 运行期间 Codex 更新时，重启 Omi 触发检查。自动检查独立于设备通信，演示模式不启用；手动安装/卸载仍须断开设备。
+换 Wi-Fi 后可先用原凭据查找/更新地址，也可语音开启新配对：说“老鼠狒狒”，听到确认音后说“开启配对模式”，输入屏幕当前 IP 与新码。换电脑或丢失凭据时，从“配对帮助”进入“重新配对已有设备”，阅读旧凭据失效提示并确认提交。普通重启不开窗；五分钟或五次尝试后可再次用语音开窗。需配套固件与 47 词模型，详见 [PAIRING.md](https://github.com/ZoeGet/Omi/blob/main/Tools/DeviceBridge/PAIRING.md)。
 
 ## 外观、窗口与托盘
 
-品牌和窗口标题为 Omi，应用图标来源见 [icons/README.md](src-tauri/icons/README.md)。侧栏分为设备控制、设备管理，蓝色选中态突出当前位置；设置固定在底部，连接卡显示连接方式及设备确认的当前模式。侧栏可拖动至 160–320 px，也支持聚焦分隔线后使用方向键、Home/End；小屏使用顶部导航并保留设置入口。悬停过渡遵循系统减少动态效果偏好。
+每次启动 Omi 时自动检查一次已安装监控所选的 Codex 程序，运行期间不定时扫描。已选 `bin/<16位版本目录>/codex.exe` 不再运行、同一安装位置只有一个其他版本正在运行时，校验组件后自动备份并更新 Omi Hook 与精确路径列表。保留其他 Hook、历史记录及已选的其他程序；不修改 Codex 信任记录。更新后各页面提示用户审查信任新 Hook，必要时重新加载配置或重启 Codex，再执行普通工具操作，点击“重新检测监控”；收到真实事件并确认宿主关联后提示消失。多个新版本、其他已选程序失效、配置或组件校验异常时转为手动处理；自定义程序位置不猜测迁移。Omi 运行期间 Codex 更新时，重启 Omi 触发检查。自动检查独立于设备通信，演示模式不启用；手动安装/卸载仍须断开设备。
+
+品牌和窗口标题为 Omi，应用图标来源见 [icons/README.md](https://github.com/ZoeGet/Omi/blob/main/Tools/Desktop/src-tauri/icons/README.md)。侧栏分为设备控制、设备管理，蓝色选中态突出当前位置；设置固定在底部，连接卡显示连接方式及设备确认的当前模式。侧栏可拖动至 160–320 px，也支持聚焦分隔线后使用方向键、Home/End；小屏使用顶部导航并保留设置入口。悬停过渡遵循系统减少动态效果偏好。
 
 设置提供浅色、深色、跟随系统三张预览卡。浅色白底、深色黑底；Windows 标题栏同步切换。偏好保存在本机 `omi.theme`，默认跟随系统；固定主题不受系统切换影响。存储不可用时仍可本次切换。
 
@@ -34,7 +34,7 @@
 
 首次未配置时，首页显示三步向导。完成配置或选择“稍后配置”后记住收起状态，重启不再展开；升级前已经安装的用户也会自动收起，不要求每次启动先收到新事件。偏好保存在本机 `omi.monitorSetup.dismissed`，存储不可用时仍可本次收起。设置页始终保留完整检测、修复/更新与卸载入口；收起向导不表示监控已就绪：
 
-1. 核对运行中的 Codex 程序，或手动选择桌面/CLI 的 `Codex.exe`，安装采集组件。
+1. 先断开设备连接并退出演示模式，核对运行中的 Codex 程序，或手动选择桌面/CLI 的 `Codex.exe`，安装采集组件。
 2. 在 Codex 中审查并信任 Omi Hook；定义变化后按 Codex 提示重新审查。安装不自动授予信任。
 3. 让 Codex 执行普通操作，再检测；只有本次安装收到真实事件且宿主关联正常才显示就绪。
 
@@ -42,11 +42,11 @@
 
 手动安装/修复/卸载仅在断开设备且非演示模式时允许。版本化运行目录避免覆盖正在使用的采集器；写入前检查配置外部变更，安装收据保存失败回退原 Hook。卸载只删除清单内哈希匹配的自有文件，保留占用/修改文件、其他 Hook、备份和历史状态。不读写 Codex 内部信任数据库；未收到事件时无法区分未信任与尚未触发。
 
-Codex 更新后若出现来源异常，先核对所选程序是否仍是当前实际运行路径，再修复安装、重新信任并用普通操作验证。升级 Omi 包不会自动替换独立安装的采集器；完整排查、结束仍红的原因及验收步骤见 [更新后排查与本次修复](../CodexMonitor/README.md#codex-更新后排查与本次修复--upgrade-troubleshooting)。
+Codex 更新后若出现来源异常，先核对所选程序是否仍是当前实际运行路径，再修复安装、重新信任并用普通操作验证。升级 Omi 包不会自动替换独立安装的采集器；完整排查、结束仍红的原因及验收步骤见 [更新后排查与本次修复](https://github.com/ZoeGet/Omi/blob/main/Tools/CodexMonitor/README.md#codex-更新后排查与本次修复--upgrade-troubleshooting)。
 
 ## 监控状态与灯效
 
-支持 `taskCards` 的配套隔离固件在进入 Codex 监控后，将设备屏幕切换为最多四个活动对话的 2×2 任务气泡（不显示宠物）。本地标题索引匹配后以文字位图传输，等待操作优先、槽位稳定，完成退出；超过四个提示额外数量。空闲及来源失效分别提示；切本地、语音接管或监控断联恢复仪表盘，配对码优先。标题、状态和卡片按变化区域缓冲刷新。仅新增上位机不改变旧设备屏幕，需另行授权刷入配套固件。标题信息与协议边界见 [任务屏协议](../DeviceBridge/README.md#业务快照--business-snapshots)。实机短时演示及用户观感确认通过，长期稳定性仍待验证。
+支持 `taskCards` 的配套隔离固件在进入 Codex 监控后，将设备屏幕切换为最多四个活动对话的 2×2 任务气泡（不显示宠物）。本地标题索引匹配后以文字位图传输，等待操作优先、槽位稳定，完成退出；超过四个提示额外数量。空闲及来源失效分别提示；切本地、语音接管或监控断联恢复仪表盘，配对码优先。标题、状态和卡片按变化区域缓冲刷新。仅新增上位机不改变旧设备屏幕，需升级为配套固件；升级步骤见[固件文档](https://github.com/ZoeGet/Omi/blob/main/Firmware/README.md)。标题信息与协议边界见 [任务屏协议](https://github.com/ZoeGet/Omi/blob/main/Tools/DeviceBridge/README.md#业务快照--business-snapshots)。实机短时演示与刷新目视检查通过，长期稳定性仍待验证。
 
 - 默认运行红、等待操作黄、完成/空闲绿；来源异常/无事件及会话离线默认绿，协议仍分别保留 unknown、idle、offline，不伪造完成。
 - 同一聊天的异步待回复问题不再覆盖实际运行：运行时为 working；当前任务停止但仍有本任务问题待回复时为 waitingApproval；新用户任务接替后，旧问题仍保留记录，但不阻止新任务完成。同步输入与真实权限审批仍优先；不同聊天之间保持等待优先。普通文字或其他工具返回不代表回答了特定问题。
@@ -56,26 +56,38 @@ Codex 更新后若出现来源异常，先核对所选程序是否仍是当前�
 
 桌面 `LifecycleReader` 仅接纳近期、事件证明匹配且宿主存活的记录，之后延续同一生命周期。30 秒评估预算、8 秒传输余量、1 秒通信周期、2 秒超时、1 次重试和 5 秒租约保持独立。没有新 Hook 不等于完成；不改写事件原始时间，不允许缓存评估自行续期。快照与宿主证明在同一互斥锁内发布/读取。
 
-进程退出、绑定/身份失效、来源不可读或锁失败会清除延续资格；重开监控不接纳过期历史。旧轮次漏失 Stop/Interrupt 不再永久覆盖新任务的结束。若当前任务也漏失结束事件且尚无新用户任务接替，仍可能保留红/黄；宿主存活不能证明具体聊天运行，当前没有独立逐聊天状态接口，不能承诺绝对精准。异常默认绿也不代表已完成。细节见 [CodexMonitor](../CodexMonitor/README.md)。
+进程退出、绑定/身份失效、来源不可读或锁失败会清除延续资格；重开监控不接纳过期历史。旧轮次漏失 Stop/Interrupt 不再永久覆盖新任务的结束。若当前任务也漏失结束事件且尚无新用户任务接替，仍可能保留红/黄；宿主存活不能证明具体聊天运行，当前没有独立逐聊天状态接口，不能承诺绝对精准。异常默认绿也不代表已完成。细节见 [CodexMonitor](https://github.com/ZoeGet/Omi/blob/main/Tools/CodexMonitor/README.md)。
 
-历史聊天不会占用设备的 16 个当前会话名额：启动前过期且未接纳的记录留在本地历史中，已确认结束的记录只保留最新一个显示；已接纳的运行、等待和本轮观察后失去证明的未结束聊天不会因静默而被丢弃。实际当前视图超过 16 个仍报来源异常，不截断活动会话。修复需配套更新后台与已安装采集器，见 [历史容量排查](../CodexMonitor/README.md#历史聊天超过设备容量导致来源异常)。
+历史聊天不会占用设备的 16 个当前会话名额：启动前过期且未接纳的记录留在本地历史中，已确认结束的记录只保留最新一个显示；已接纳的运行、等待和本轮观察后失去证明的未结束聊天不会因静默而被丢弃。实际当前视图超过 16 个仍报来源异常，不截断活动会话。修复需配套更新后台与已安装采集器，见 [历史容量排查](https://github.com/ZoeGet/Omi/blob/main/Tools/CodexMonitor/README.md#历史聊天超过设备容量导致来源异常)。
 
 累计聊天/历史记录未设置固定数量上限，可以继续新建聊天；历史暂未自动裁剪，仍受电脑资源限制。16 指当前设备视图条目数，除运行/等待外还可能包含来源未知条目和最新结束记录。只发电脑汇总状态以取消固定会话上限尚未实现。
 
 ## 源码结构与构建
 
-[Tools 分层](../README.md) 按界面、状态来源、设备传输拆分。`App.tsx` 负责导航；`Overview.tsx` 负责首页双连接；`DevicePages.tsx` 负责配对、诊断与设置；灯光、主题、窗口设置和监控向导分别使用独立组件。
+[Tools 分层](https://github.com/ZoeGet/Omi/blob/main/Tools/README.md) 按界面、状态来源、设备传输拆分。`App.tsx` 负责导航；`Overview.tsx` 负责首页双连接；`DevicePages.tsx` 负责配对、诊断与设置；灯光、主题、窗口设置和监控向导分别使用独立组件。
 
 Rust 只启动固定相邻路径 `omi-device/omi-device.exe` 并串行转发 JSON；请求与管道读写不阻塞界面。隐藏窗口保留后台，真正退出统一释放设备。原生命令仅接受主窗口调用；原生对话框只用于选择文件/目录，不开放任意程序执行或远程网络接口。
 
 `backend.py` 调用 `controller.py` / `worker.py`，USB/WSS 共用会话初始化与失败释放。配对、验证与寻址使用后台工作线程。`monitor_setup.py` 管安装，冻结后台 `--collect-hook` 经 `hook_runner.py` 调用 `bound_collector.run`，共享原生命周期与宿主关联逻辑。仅保存状态/关联元数据，不保存对话、工具参数或回复；设备传输使用连接内别名；支持任务屏的设备还接收本机标题索引生成的文字位图，不传正文。
 
-构建需要 Node.js、Rust MSVC、Microsoft C++ Build Tools（使用 C++ 的桌面开发）、WebView2、Python 3.10+、CMake、Ninja 和 PlatformIO SDK 的 Mbed TLS 2.28.7 源码。依赖版本由 npm/Cargo 锁文件、原生构建版本检查和 `requirements-build.txt` 管理。
+构建需要 Windows x64、Git、Node.js 22（22.12.0 或更高的 22.x）或 Node.js 24、Rust MSVC、Microsoft C++ Build Tools（使用 C++ 的桌面开发与 Windows SDK）、WebView2、Python 3.10+、CMake 和 Ninja。`node`、`npm`、`cargo`、`python`、`cmake`、`ninja` 需要在 PATH；Python 应使用 x64 解释器。从 Git 克隆仓库并保留 `.git`，打包时用它记录源码提交；GitHub 自动生成的源码 ZIP 不包含这份历史。依赖版本由 npm/Cargo 锁文件、原生构建版本检查和 `requirements-build.txt` 管理。
+
+原生配对组件还需要 **Mbed TLS 2.28.7 源码**。默认读取用户目录 `.platformio/packages/framework-espidf/components/mbedtls/mbedtls`；新电脑可先安装 PlatformIO，并在仓库根目录执行默认固件构建来准备已验证 SDK（只构建，不刷机）：
+
+```powershell
+python -m pip install platformio
+pio run -d Firmware -e esp32-s3-devkitc-1
+```
+
+如只开发桌面程序，也可自行准备同版本 Mbed TLS 源码，并在下方打包命令附加 `-MbedTlsSource <源码目录>`。自定义 `PLATFORMIO_CORE_DIR` 或包目录时，也须显式传该路径；单独准备原生 DLL 的 `python ../DeviceBridge/native/build_windows.py` 命令应同时附加 `--source <源码目录>`。原生 CMake 会拒绝其他版本；不要使用其他版本的同名目录代替。
 
 ```powershell
 cd Tools/Desktop
+python -m venv .venv
+./.venv/Scripts/Activate.ps1
 npm ci
 python -m pip install -r requirements-build.txt
+python ../DeviceBridge/native/build_windows.py
 python -m unittest discover -s tests -v
 npm test
 npm run build
@@ -84,9 +96,11 @@ npm run build
 
 产物仅为 `release/Omi/` 和 `release/Omi-Windows-1.0.0.zip`。`src-tauri/target/release/omipet-ui-pilot.exe` 是内部名称，单独拷贝不能运行。`npm run dev` 只在 `127.0.0.1:5173` 预览，浏览器不能操作设备；`Omi.exe --demo` 仅操作模拟设备。Tauri 开发模式需先把 `build/helper/omi-device/` 复制至 `src-tauri/target/debug/`。
 
-打包包含 Python、串口/WSS 依赖及原生 PAKE DLL；许可收集缺失即失败，含所下载的 Rust 构建依赖。依赖来源见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。缓存、exe/zip、凭据、安装记录和原始日志均不进入 Git；提交、推送和 Release 发布须分别授权。
+打包包含 Python、串口/WSS 依赖、原生 PAKE DLL、项目 `LICENSE.txt` 与第三方许可；许可收集缺失即失败，含所下载的 Rust 构建依赖。`SOURCE_VERSION.txt` 记录构建时的 Git 基线提交、源码链接和工作树是否含修改；有修改时，提交链接本身不足以复现该包，不能据此宣称是干净提交构建。此记录不包含本机路径或差异内容。依赖来源见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
-## 验证现状与边界（2026-10-19）
+正式发布应从已提交且工作树干净的源码构建，以新版本标签对应同一提交，并在 Release 写明源码与 ZIP SHA256；不要用替换同名 ZIP 代替版本记录。历史 V1.0 的对应关系见 [Release 说明](RELEASE_NOTES_V1.0.md#源码对应关系)。本地构建不会自动上传或修改 GitHub。缓存、exe/zip、凭据、安装记录和原始日志均不进入源码提交。
+
+## 历史验证与待验边界
 
 2026-10-18 首页双连接改动通过 30 项前端测试、TypeScript/Vite 与 Windows release 构建；最终顶部标识修改后 17 项首页/App 测试通过。同期桥接 124 项、桌面 Python 36 项、语音词表 4 项与原生窗口设置 2 项通过。2026-10-19 首次引导记忆改动后通过 36 项前端测试及 TypeScript/Vite/Windows 打包；这些是对应源码的快照，不是长期或硬件认证。
 

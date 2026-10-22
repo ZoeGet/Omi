@@ -1,4 +1,4 @@
-# OmiPet 共用通信协议
+# Omi 共用通信协议
 
 本目录提供 USB/WSS 共用协议、状态桥接、模拟器和验证工具。用户使用的唯一桌面入口见 [Tools/Desktop](../Desktop/README.md)。隔离实验已支持六位码配对、凭据保存、重连认证及无线灯光/监控；实现和验证边界见 [PAIRING.md](PAIRING.md)。
 
@@ -13,7 +13,7 @@
 
 ## 当前行为与验证边界
 
-当前设备已升级语音重配隔离固件及配套模型，保留 20 ms USB 过滤，并支持 USB/WSS 手动灯光、五状态可配置监控灯效及语音优先。默认来源未知/无事件/完成绿、工作红、待操作黄；监控断联或租约结束关灯，不受灯效配置影响。换珠后默认红白黄曾经用户目视确认；用户修改配置后应以保存的灯效为准。默认 `Firmware/platformio.ini` 仍关闭协议实验，不能拿默认镜像替代当前设备的上位机固件。
+启用相应选项的隔离固件及配套模型支持语音重配、20 ms USB 短信号过滤，以及 USB/WSS 手动灯光、五状态可配置监控灯效及语音优先。默认来源未知/无事件/完成绿、工作红、待操作黄；监控断联或租约结束关灯，不受灯效配置影响。修改配置后以保存的灯效为准。默认 `Firmware/platformio.ini` 仍关闭协议实验，连接上位机需使用对应的隔离构建。
 
 历史 USB 旧版曾有恢复性重连，后续 20 ms 隔离版有 30 分钟全部更新确认、无新增断线的记录。2026-10-18 重配测试仍出现过自动断连，原因未定位；不同版本的测试不能互相替代或证明当前长期稳定。实际波形、完整语音/监控关闭/断联目视验收仍需补齐；原始收据、日志和备份只留本地 `tmp/`。历史实现过程从 Git 历史查看，本文只保留现行接口与必要验证边界。
 
@@ -101,11 +101,11 @@ Windows 控制中心、实机步骤与最新验证见 [Desktop](../Desktop/READM
 
 CodexMonitor 保存生命周期观测和事件关联宿主证据。CLI 默认仍使用事件年龄预算。桌面监控通过 `LifecycleReader` 接纳近期且宿主存活的 schema 2 事件证明，随后延续同一生命周期，收到结束事件才结束；不会将长时间无新事件误当成完成。旧事件时间与年龄保留不变，每轮独立校验的评估使用原有 30 秒预算，扣除 8 秒传输余量；设备挑战还会扣除心跳到快照的耗时，缓存评估不能自行续期。重开监控不接纳过期历史状态，来源/绑定/进程失效则清除延续资格。心跳不生成业务事件，`sourceLiveness` 仍为 `unverified`；遗漏 Stop 且宿主仍存活时无法独立确认聊天已结束。协议 unknown 不等同 idle，`waitingApproval` 同时覆盖待审批与待用户选项回复。同一聊天的异步问题保留待回复记录，但不覆盖实际执行的 working；当前任务停止而仍有本任务问题待回复时显示等待；新任务接替后，历史未结束轮次和背景异步问题不再覆盖新任务完成，真实审批及跨聊天等待仍优先。
 
-已确认实机预算：最大 JSON 4096 字节、当前快照最多 16 会话、深度 8、每轮接收 64 字节、USB TX 缓冲 8192 字节、写等待 1 ms、租约 5000 ms。桌面通信周期 1 秒、超时 2 秒、最多重试 1 次。累计聊天/磁盘历史不设固定数量上限，仍受电脑资源限制；桌面视图排除过期未接纳历史并收拢已确认结束记录，保留活动会话和必要未知项，不把全部历史传给设备。历史 17 会话容量故障已修复，验证和边界见 [CodexMonitor](../CodexMonitor/README.md#历史聊天超过设备容量导致来源异常)。修改预算或调度前按项目协作规则确认，不能照搬测试中的合成阈值。
+已确认实机预算：最大 JSON 4096 字节、当前快照最多 16 会话、深度 8、每轮接收 64 字节、USB TX 缓冲 8192 字节、写等待 1 ms、租约 5000 ms。桌面通信周期 1 秒、超时 2 秒、最多重试 1 次。累计聊天/磁盘历史不设固定数量上限，仍受电脑资源限制；桌面视图排除过期未接纳历史并收拢已确认结束记录，保留活动会话和必要未知项，不把全部历史传给设备。历史 17 会话容量故障已修复，验证和边界见 [CodexMonitor](../CodexMonitor/README.md#历史聊天超过设备容量导致来源异常)。修改预算或调度需重新进行音频并行、断联与输出验证，不能照搬测试中的合成阈值。
 
 ### 历史验证（2026-10-16，仅适用于当时镜像）
 
-短断线排查：旧日志有无总线重置、无协议超时的毫秒级 `isPlugged()` 低信号，旧传输层会立即清除会话。[Espressif HWCDC 源码](https://github.com/espressif/arduino-esp32/blob/master/cores/esp32/HWCDC.cpp) 也说明 SOF 检测可短时翻转；这不能单独证明物理线缆稳定。可选 `--link-grace-ms` 只用于隔离构建，必须显式指定正数且小于租约；默认 `OMIPET_PROTOCOL_LINK_GRACE_MS=0` 保持即时断开。宽限期内暂停收发、不续租；恢复后只延续尚未过期的原会话，达到边界仍断开并拒绝旧连接请求。`filtered_link_gaps` 与确认断开的 `link_losses` 分别计数。用户已确认 20 ms 并授权烧录，现有 SOF 修补和稳定默认配置保持不变。
+短断线排查：旧日志有无总线重置、无协议超时的毫秒级 `isPlugged()` 低信号，旧传输层会立即清除会话。[Espressif HWCDC 源码](https://github.com/espressif/arduino-esp32/blob/master/cores/esp32/HWCDC.cpp) 也说明 SOF 检测可短时翻转；这不能单独证明物理线缆稳定。可选 `--link-grace-ms` 只用于隔离构建，必须显式指定正数且小于租约；默认 `OMIPET_PROTOCOL_LINK_GRACE_MS=0` 保持即时断开。宽限期内暂停收发、不续租；恢复后只延续尚未过期的原会话，达到边界仍断开并拒绝旧连接请求。`filtered_link_gaps` 与确认断开的 `link_losses` 分别计数。历史实测使用 20 ms；隔离示例沿用该值，默认配置仍不启用此过滤。
 
 2026-10-16：COM17 上 30 分钟共 1613 次状态更新全部确认，过滤 9 次短脉冲，最长记录 6 ms；断线/重连/总线重置/写失败均未新增，零超时/解码错误、无音频队列或看门狗异常，关闭释放确认。实验固件 RAM 66520 / Flash 1549229 字节，5 MiB 模型随 5 个镜像校验烧录；默认构建 RAM 57896 / Flash 1532693 字节通过且未刷入。另有 3 次 `unknown`，尚未确定状态来源原因，不能将 USB 连续性通过等同于状态/灯效全部稳定；该轮未完成物理拔线与完整红绿目视；后续补验仅覆盖下文的相应样例。
 
@@ -117,17 +117,17 @@ CodexMonitor 保存生命周期观测和事件关联宿主证据。CLI 默认仍
 
 ### 当前 CLI 使用
 
-桌面程序复用 `Desktop/controller.py` 和 `worker.py`，不安装自动后台服务。CLI 默认只传 unknown；显式的状态显示需同时给出有效期、宿主绑定及 `--monitor-lights`。例如在仓库根目录执行已确认的 60 秒前台实验：
+桌面程序复用 `Desktop/controller.py` 和 `worker.py`，不安装自动后台服务。CLI 默认只传 unknown；显式的状态显示需同时给出有效期、宿主绑定及 `--monitor-lights`。例如在仓库根目录执行 60 秒前台实验（先替换实际串口与绑定文件路径）：
 
 ```powershell
-python Tools/DeviceBridge/bridge.py --port COM17 --max-json-bytes 4096 --max-sessions 16 --interval-seconds 1 --timeout-seconds 2 --retries 1 --duration-seconds 60 --max-age-seconds 30 --process-bindings <本机绑定文件> --monitor-lights --stop-file tmp/codex-bridge.stop --report tmp/codex-bridge-report.json
+python Tools/DeviceBridge/bridge.py --port <实际串口> --max-json-bytes 4096 --max-sessions 16 --interval-seconds 1 --timeout-seconds 2 --retries 1 --duration-seconds 60 --max-age-seconds 30 --process-bindings <本机绑定文件> --monitor-lights --stop-file tmp/codex-bridge.stop --report tmp/codex-bridge-report.json
 ```
 
 端口先重新枚举，report 选尚不存在的新路径；已有 stop 文件会阻止打开串口。Ctrl+C 或 stop 文件结束时尝试 release，只有匹配 ACK 才能报告释放确认；异常退出依靠设备租约。耗时超出周期不补发旧观测，租约到期重新握手。
 
 ## 构建与验证
 
-Python 3.10+；USB 另需 pyserial。无设备测试：
+Python 3.10+；先安装 `Tools/Desktop/requirements.txt` 中的依赖，涉及原生 PAKE 的测试需先按 [PAIRING.md](PAIRING.md) 准备 DLL。无设备测试：
 
 ```powershell
 python -m unittest discover -s Tools/DeviceBridge/tests -v
@@ -143,12 +143,12 @@ python Tools/DeviceBridge/tests/create_experiment_config.py --output tmp/desktop
 pio run -d Firmware -c (Resolve-Path tmp/desktop-protocol.ini)
 ```
 
-该示例只启用 USB 桌面功能。完整无线配对/控制使用另一份新配置，在同一生成命令中额外加入 `--wireless-pairing --wireless-control`；保持其余已确认参数，并为 `--output` 和 `--build-dir` 选择独立新路径。生成配置不会自动烧录，也不会更换稳定默认构建。
+该示例只启用 USB 桌面功能。烧录时使用 `pio run -d Firmware -c (Resolve-Path tmp/desktop-protocol.ini) -t upload --upload-port <实际串口>`，确保构建与上传沿用同一隔离配置。完整无线配对/控制使用另一份新配置，在同一生成命令中额外加入 `--wireless-pairing --wireless-control`；保持其余已确认参数，并为 `--output` 和 `--build-dir` 选择独立新路径。生成配置不会自动烧录，也不会更换稳定默认构建。
 
-SOF 修复只在构建目录生成 SDK 源文件副本，不改上游安装包。正式默认配置和当前设备镜像保持分离；烧录须另有用户授权，并保留原应用、引导、分区、OTA 与 5 MiB 模型回退证据。不能只烧应用后宣称模型一致。
+SOF 修复只在构建目录生成 SDK 源文件副本，不改上游安装包。隔离配置与默认配置分开维护；升级前备份完整 Flash，保留原应用、引导、分区、OTA 与 5 MiB 模型回退证据。不能只烧应用后宣称模型一致。
 
 实机验收：设备状态 → 独占正确串口 → 握手与能力 → light/快照/过期/释放 → 比较 ACK 与实体行为。检查 `[PROTO]` 的 mode/display/lease、丢帧/重连计数，`mic=ok`、`queued/dropped`、WDT/panic 和语音 ID；无日志证据时写未观测，不写通过。物理拔线需设备独立供电，正常关闭串口不等于物理拔线。
 
 ## 隐私与配对
 
-Hook 原始事件、真实会话/工具标识、宿主路径、串口日志、报告和镜像不提交。传输只使用连接内别名和状态；配对码、日常凭证和 TLS 私钥只留本地。真实网络配对仅在隔离固件开启，稳定配置默认关闭；未启用 NVS 加密，不执行不可逆 eFuse 配置。提交边界见根目录 CONTRIBUTING.md。
+Hook 原始事件、真实会话/工具标识、宿主路径、串口日志、报告和镜像不提交。监控传输使用连接内别名和状态；支持任务屏时还会发送可识读的标题位图，详见上文“业务快照”；配对码、日常凭证和 TLS 私钥只留本地。真实网络配对仅在隔离固件开启，稳定配置默认关闭；未启用 NVS 加密，不执行不可逆 eFuse 配置。提交边界见根目录 CONTRIBUTING.md。

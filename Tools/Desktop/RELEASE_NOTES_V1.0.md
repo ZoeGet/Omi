@@ -13,7 +13,11 @@ Omi 的 Windows 设备控制中心，支持 USB / Wi-Fi 连接、本地灯光编
 
 ## 下载哪个文件
 
-在本页 **Assets** 中下载 **Omi-Windows-1.0.0.zip**。这是 Windows x64 便携包，无需安装 Python、Rust 或开发工具。GitHub 自动生成的 **Source code** 仅供开发，不是可运行的上位机。
+在 [Release 页面](https://github.com/ZoeGet/Omi/releases/tag/v1.0.0)的 **Assets** 中下载 **Omi-Windows-1.0.0.zip**。这是 Windows x64 便携包，无需安装 Python、Rust 或开发工具。GitHub 自动生成的 **Source code** 仅供开发，不是可运行的上位机。
+
+## 源码对应关系
+
+V1.0 更新便携包对应提交 [b09d6e4](https://github.com/ZoeGet/Omi/tree/b09d6e4c4a67d39e20379c929cb9782289e35c0d)。原 `v1.0.0` 标签保留首次发布提交 `4520425`，Release 自动生成的 Source code 是首发源码；复现更新包请使用前述提交。这里记录历史发布情况，当前文档或构建脚本的后续修改不表示线上 ZIP 已重新发布。后续版本以新标签固定对应源码。
 
 ## 第一次启动
 
@@ -41,6 +45,8 @@ Omi 的 Windows 设备控制中心，支持 USB / Wi-Fi 连接、本地灯光编
 语音配对需要配套的无线固件和语音模型。屏幕显示 `PAIR UNREADY` 时先确认设备已联网且无线服务就绪。普通开机不会自动开启配对窗口。
 
 ## Codex 任务监控
+
+开启任务屏会读取本机标题索引，把可识读的聊天标题位图发送至设备显示；不发送聊天正文。采集器在本地保留会话标识、工作目录和宿主关联等元数据，详见使用指南。
 
 1. 打开本机 Codex；在 Omi 首次向导或“设置”中点击“重新检测监控”，核对所选 Codex 程序，必要时选择实际的 `Codex.exe`。
 2. 断开设备连接后，点击“安装监控组件”或修复/更新入口。程序会备份并合并自己的 Hook，保留其他工具的 Hook。
@@ -70,4 +76,4 @@ Omi 的 Windows 设备控制中心，支持 USB / Wi-Fi 连接、本地灯光编
 
 本发布包含 Windows 上位机便携包，不包含固件镜像。界面测试和 Windows 构建通过；不代表所有电脑、网络环境及设备长期运行均已验证。电池供电下曾有联网后灯带随机闪烁反馈，USB 下用户反馈正常，原因尚未定位；该硬件现象未在本版本中宣称修复。
 
-第三方软件许可与图标来源说明随包提供，见 `THIRD_PARTY_NOTICES.md`、`DEPENDENCY_LICENSES.txt` 和 `APP_ICON_SOURCE.md`。
+第三方软件许可与图标来源说明见随包的 `THIRD_PARTY_NOTICES.md`、`DEPENDENCY_LICENSES.txt` 和 `APP_ICON_SOURCE.md`。项目软件许可见仓库根目录 LICENSE；后续构建另附 `LICENSE.txt` 和 `SOURCE_VERSION.txt`。图标来源说明不代表附带第三方形象的再分发授权，详见[图标说明](https://github.com/ZoeGet/Omi/blob/main/Tools/Desktop/src-tauri/icons/README.md)。
