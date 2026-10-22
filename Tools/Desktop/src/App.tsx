@@ -62,7 +62,7 @@ export function Desktop({ device, appearance: { dark, theme, preference, setPref
           <section className="sidebar-device" aria-label="当前设备连接"><span className="sidebar-device-icon"><PlugConnected20Regular /></span><div>
             <strong><i className={device.connected ? 'connection-dot online' : 'connection-dot'} />{device.demo ? '模拟设备' : device.connected ? 'Omi 已连接' : '等待设备连接'}</strong>
             <small>{device.connected ? `${device.demo ? '演示模式' : device.transport === 'wifi' ? 'Wi-Fi' : 'USB'} · ${connectionMode}` : 'USB / Wi-Fi'}</small>
-          </div></section><span className="pilot-label">OMI · V1.0</span></div>
+          </div></section><span className="pilot-label">OMI · V1.0.1</span></div>
       </aside>
       <SidebarResize width={sidebarWidth} change={setSidebarWidth} />
       <div className="workspace">

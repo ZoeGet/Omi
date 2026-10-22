@@ -25,7 +25,7 @@ ESP32-S3 桌面伙伴：离线中文语音、环境显示、灯光控制，以�
 
 ### 已有 Omi 设备
 
-1. 在 [Releases](https://github.com/ZoeGet/Omi/releases) 的 **Assets** 中下载 `Omi-Windows-1.0.0.zip`，完整解压后运行 `Omi/Omi.exe`；保留相邻的 `omi-device` 文件夹和许可文件。
+1. 在 [Releases](https://github.com/ZoeGet/Omi/releases) 的 **Assets** 中下载 `Omi-Windows-1.0.1.zip`，完整解压后运行 `Omi/Omi.exe`；保留相邻的 `omi-device` 文件夹和许可文件。
 2. 需要 Windows x64 和 WebView2 Runtime。便携包内置后台，无需安装 Python、Rust 或 PlatformIO；任务监控还需要本机 Codex。
 3. 按[使用指南](Tools/Desktop/QUICK_START.md)连接设备、调灯或配置监控。软件不包含固件镜像，也不会自动升级设备。
 
@@ -42,6 +42,8 @@ pio run -d Firmware -e esp32-s3-devkitc-1
 以上命令需要先安装 PlatformIO，构建的是默认固件，不会刷机。已克隆但未初始化子模块时运行 `git submodule update --init --recursive`。固件采用 Arduino + ESP-IDF，Espressif32 固定为 6.12.0；完整工具链、引脚与烧录步骤见[固件开发](Firmware/README.md)。Windows 开发依赖和打包步骤见[桌面开发文档](Tools/Desktop/README.md#源码结构与构建)。
 
 ### 版本与下载源码
+
+V1.0.1 的 Windows 包对应 [`v1.0.1` 标签](https://github.com/ZoeGet/Omi/tree/v1.0.1)，包内 `SOURCE_VERSION.txt` 记录完整提交号；变更与升级步骤见 [V1.0.1 发布说明](Tools/Desktop/RELEASE_NOTES_V1.0.1.md)。
 
 V1.0 的更新便携包对应源码 `b09d6e4`，原 `v1.0.0` 标签仍指向首发提交 `4520425`；复现该更新包应使用 [b09d6e4 源码快照](https://github.com/ZoeGet/Omi/tree/b09d6e4c4a67d39e20379c929cb9782289e35c0d)，不要把 Release 自动生成的 Source code 当作更新后的源码。该历史差异也写在 Release 页面；后续发布使用与对应源码一致的新版本标签。
 

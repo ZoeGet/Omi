@@ -4,7 +4,7 @@
 
 ## 使用与连接
 
-从 [Releases](https://github.com/ZoeGet/Omi/releases) 下载便携包，完整解压 `Omi-Windows-1.0.0.zip` 后运行 `Omi.exe`，保留旁边完整的 `omi-device/`。该目录是内置后台与 Python 环境，不是第二套界面；用户无需安装 Python、Rust 或取得源码。使用步骤见 [QUICK_START.md](QUICK_START.md)。
+从 [Releases](https://github.com/ZoeGet/Omi/releases) 下载便携包，完整解压 `Omi-Windows-1.0.1.zip` 后运行 `Omi.exe`，保留旁边完整的 `omi-device/`。该目录是内置后台与 Python 环境，不是第二套界面；用户无需安装 Python、Rust 或取得源码。使用步骤见 [QUICK_START.md](QUICK_START.md)，本版变更见 [V1.0.1 发布说明](RELEASE_NOTES_V1.0.1.md)。
 
 - 首页“设备连接”统一切换 USB / Wi-Fi。USB 选择与刷新串口；Wi-Fi 选择与刷新已保存设备，只有一台可用设备时自动选中，多台时手选。
 - 无线配对页优先显示已保存设备，正常记录只保留“无线连接”“重新查找设备”；未确认或重配待确认时显示“验证连接”。完整地址和手动改地址收进“更多操作”，新配对在独立卡片；已连接时显示原因及“断开当前连接”。
@@ -94,7 +94,7 @@ npm run build
 ./build_windows.ps1 -Python python
 ```
 
-产物仅为 `release/Omi/` 和 `release/Omi-Windows-1.0.0.zip`。`src-tauri/target/release/omipet-ui-pilot.exe` 是内部名称，单独拷贝不能运行。`npm run dev` 只在 `127.0.0.1:5173` 预览，浏览器不能操作设备；`Omi.exe --demo` 仅操作模拟设备。Tauri 开发模式需先把 `build/helper/omi-device/` 复制至 `src-tauri/target/debug/`。
+产物仅为 `release/Omi/` 和 `release/Omi-Windows-1.0.1.zip`。`src-tauri/target/release/omipet-ui-pilot.exe` 是内部名称，单独拷贝不能运行。`npm run dev` 只在 `127.0.0.1:5173` 预览，浏览器不能操作设备；`Omi.exe --demo` 仅操作模拟设备。Tauri 开发模式需先把 `build/helper/omi-device/` 复制至 `src-tauri/target/debug/`。
 
 打包包含 Python、串口/WSS 依赖、原生 PAKE DLL、项目 `LICENSE.txt` 与第三方许可；许可收集缺失即失败，含所下载的 Rust 构建依赖。`SOURCE_VERSION.txt` 记录构建时的 Git 基线提交、源码链接和工作树是否含修改；有修改时，提交链接本身不足以复现该包，不能据此宣称是干净提交构建。此记录不包含本机路径或差异内容。依赖来源见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 

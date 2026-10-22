@@ -1,8 +1,8 @@
-# Omi V1.0 Windows 使用说明
+# Omi V1.0.1 Windows 使用说明
 
 ## 下载与启动
 
-从 [GitHub Releases](https://github.com/ZoeGet/Omi/releases) 的 **Assets** 下载 `Omi-Windows-1.0.0.zip`。不要下载自动生成的 `Source code`，它是源码，不是可运行的软件。
+从 [GitHub Releases](https://github.com/ZoeGet/Omi/releases) 的 **Assets** 下载 `Omi-Windows-1.0.1.zip`。不要下载自动生成的 `Source code`，它是源码，不是可运行的软件。
 
 右键压缩包，选择“全部解压”，打开解压后的 `Omi` 文件夹，双击 `Omi.exe`。不要在压缩包内直接运行，也不要单独移动 exe；保留整个 `omi-device` 文件夹和随附许可文件。
 

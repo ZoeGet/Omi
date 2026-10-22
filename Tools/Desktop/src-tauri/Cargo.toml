@@ -1,6 +1,6 @@
 [package]
 name = "omipet-ui-pilot"
-version = "1.0.0"
+version = "1.0.1"
 description = "Omi Windows device control"
 edition = "2021"
 publish = false
