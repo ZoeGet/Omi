@@ -38,6 +38,15 @@ beforeEach(() => {
 });
 
 describe('USB desktop', () => {
+  it.each(['manual-update', 'awaiting-event'])('keeps %s reminders delivered with init', async state => {
+    localStorage.setItem('omi.monitorSetup.dismissed', '1');
+    bridge.events.push({ kind: 'monitor-setup', update: { state, message: '启动检查需要确认' } });
+    render(<App />);
+    await screen.findByRole('heading', { name: 'Codex 监控需要确认' });
+    expect(screen.getAllByText('启动检查需要确认').length).toBeGreaterThan(0);
+    await waitFor(() => expect(bridge.invoke.mock.calls.some(([, args]) => args.message.action === 'poll')).toBe(true));
+    expect(screen.getByRole('heading', { name: 'Codex 监控需要确认' })).toBeTruthy();
+  });
   it('keeps the automatic update trust reminder visible until live verification succeeds', async () => {
     localStorage.setItem('omi.monitorSetup.dismissed', '1');
     render(<App />);

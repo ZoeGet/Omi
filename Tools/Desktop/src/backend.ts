@@ -176,10 +176,10 @@ export function useDevice() {
       if (!reply.ok) throw new Error(reply.error);
       const info = reply.result as { demo: boolean; root: string; bindings: string; ports: Port[] };
       const saved = info.demo ? null : lastConnection();
-      setState(value => ({ ...value, ready: true, demo: info.demo, ports: info.ports,
+      setState(value => applyEvents({ ...value, ready: true, demo: info.demo, ports: info.ports,
         transport: saved?.transport, endpoint: saved?.port,
         settings: { root: info.root, bindings: info.bindings, port: saved?.transport === 'usb' ? saved.port : info.ports.length === 1 ? info.ports[0].device : '' },
-        notice: info.demo ? '演示模式：仅操作模拟设备。' : '请选择 USB 串口或已配对的 Wi-Fi 设备进行连接。' }));
+        notice: info.demo ? '演示模式：仅操作模拟设备。' : '请选择 USB 串口或已配对的 Wi-Fi 设备进行连接。' }, reply.events));
       if (saved?.enabled) {
         if (saved.transport === 'wifi' || info.ports.some(port => port.device === saved.port)) {
           setState(value => ({ ...value, busy: true, notice: '正在连接上次使用的设备…' }));
