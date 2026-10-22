@@ -97,11 +97,11 @@ V1.0 的更新便携包对应源码 `b09d6e4`，原 `v1.0.0` 标签仍指向首�
 | 目录 | 内容 |
 | --- | --- |
 | [Firmware](Firmware/README.md) | PlatformIO 固件、本地驱动、ESP-SR 子模块与模型生成 |
-| Hardware | 原理图、原型照片和 STEP 外壳 |
+| [Hardware](Hardware/) | 原理图、原型照片和 STEP 外壳 |
 | [Tools/Desktop](Tools/Desktop/README.md) | Windows 界面、后台与便携包构建 |
 | [Tools/CodexMonitor](Tools/CodexMonitor/README.md) | Hook 采集、宿主关联和状态判断 |
 | [Tools/DeviceBridge](Tools/DeviceBridge/README.md) | USB/WSS 协议、配对、模拟及验证工具 |
-| Tools/Repository | 源码发布检查 |
+| [Tools/Repository](Tools/Repository/) | 源码发布检查 |
 
 欢迎通过 Issue 报告问题或提交 Pull Request。请提供版本、设备/环境、复现步骤与预期结果，并对日志脱敏。测试、注释格式和提交范围见[贡献指南](CONTRIBUTING.md)。
 
