@@ -1,739 +1,444 @@
 #include "omi_pet_ui.h"
 
-//  OmiPet 屏幕界面绘制实现 / OmiPet screen user-interface rendering implementation
-
-#include <Arduino.h>
-
-#include <cstring>
+#include <algorithm>
+#include <cmath>
 #include <cstdio>
-#include <cstdint>
+#include <cstring>
 
 #include "NV3007_Display.h"
+#include "omi_ui_font.h"
 
 namespace OmiPetUi {
 namespace {
+constexpr int kWidth = OmiPetDisplay::kPanelHeight;
+constexpr int kHeight = OmiPetDisplay::kPanelWidth;
+constexpr uint16_t kBackground = OmiPetDisplay::Display::color565(8, 12, 17);
+constexpr uint16_t kSurface = OmiPetDisplay::Display::color565(21, 28, 36);
+constexpr uint16_t kLine = OmiPetDisplay::Display::color565(39, 49, 59);
+constexpr uint16_t kText = OmiPetDisplay::Display::color565(237, 241, 243);
+constexpr uint16_t kMuted = OmiPetDisplay::Display::color565(183, 197, 208);
+constexpr uint16_t kAccent = OmiPetDisplay::Display::color565(113, 225, 209);
+constexpr uint16_t kRed = OmiPetDisplay::Display::color565(255, 139, 135);
+constexpr uint16_t kAmber = OmiPetDisplay::Display::color565(244, 199, 107);
 
-struct Glyph {
-  char character;
-  uint8_t rows[7];
+//  复用原任务卡大小的静态缓冲，所有页面先合成再传输 / Reuse the original card-sized static buffer; composite every page region before transfer
+uint16_t gBuffer[206 * 50];
+int gX = 0, gY = 0, gWidth = 0, gHeight = 0;
+bool gStarted = false;
+enum class Page { Dashboard, Tasks, Listening, Pairing };
+struct UiState {
+  char temperature[16] = "--";
+  char humidity[8] = "--";
+  char clock[6] = "--:--";
+  char date[11] = "----/--/--";
+  char voice[24] = "IDLE";
+  bool timeValid = false;
+  bool network = false;
+  bool provisioning = false;
+  bool batteryValid = false;
+  uint8_t battery = 0;
+  bool tasks = false;
+  char pairingCode[7] = {};
+  char pairingAddress[16] = {};
+  uint16_t pairingSeconds = 0;
 };
+UiState gState, gRendered;
+OmiPetProtocol::TaskScreen gTasks, gRenderedTasks;
+Page gRenderedPage = Page::Dashboard;
+bool gRenderedValid = false;
+int gFullRow = -1;
+bool gFullStale = false;
 
-//  简单 5×7 字模 / Simple 5x7 bitmap font
-constexpr Glyph kFont[] = {  //  内置 ASCII 5×7 字模表 / Built-in ASCII 5x7 glyph table
-    {' ', {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}},
-    {'-', {0x00, 0x00, 0x00, 0x1F, 0x00, 0x00, 0x00}},
-    {':', {0x00, 0x04, 0x04, 0x00, 0x04, 0x04, 0x00}},
-    {'/', {0x01, 0x01, 0x02, 0x04, 0x08, 0x10, 0x10}},
-    {'.', {0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x06}},
-    {'%', {0x19, 0x19, 0x02, 0x04, 0x08, 0x13, 0x13}},
-    {'0', {0x0E, 0x11, 0x13, 0x15, 0x19, 0x11, 0x0E}},
-    {'1', {0x04, 0x0C, 0x04, 0x04, 0x04, 0x04, 0x0E}},
-    {'2', {0x0E, 0x11, 0x01, 0x02, 0x04, 0x08, 0x1F}},
-    {'3', {0x1E, 0x01, 0x01, 0x0E, 0x01, 0x01, 0x1E}},
-    {'4', {0x02, 0x06, 0x0A, 0x12, 0x1F, 0x02, 0x02}},
-    {'5', {0x1F, 0x10, 0x10, 0x1E, 0x01, 0x01, 0x1E}},
-    {'6', {0x06, 0x08, 0x10, 0x1E, 0x11, 0x11, 0x0E}},
-    {'7', {0x1F, 0x01, 0x02, 0x04, 0x08, 0x08, 0x08}},
-    {'8', {0x0E, 0x11, 0x11, 0x0E, 0x11, 0x11, 0x0E}},
-    {'9', {0x0E, 0x11, 0x11, 0x0F, 0x01, 0x02, 0x0C}},
-    {'A', {0x0E, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11}},
-    {'B', {0x1E, 0x11, 0x11, 0x1E, 0x11, 0x11, 0x1E}},
-    {'C', {0x0F, 0x10, 0x10, 0x10, 0x10, 0x10, 0x0F}},
-    {'D', {0x1E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x1E}},
-    {'E', {0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x1F}},
-    {'F', {0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x10}},
-    {'G', {0x0F, 0x10, 0x10, 0x17, 0x11, 0x11, 0x0F}},
-    {'H', {0x11, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11}},
-    {'I', {0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x1F}},
-    {'J', {0x01, 0x01, 0x01, 0x01, 0x11, 0x11, 0x0E}},
-    {'K', {0x11, 0x12, 0x14, 0x18, 0x14, 0x12, 0x11}},
-    {'L', {0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1F}},
-    {'M', {0x11, 0x1B, 0x15, 0x15, 0x11, 0x11, 0x11}},
-    {'N', {0x11, 0x19, 0x19, 0x15, 0x13, 0x13, 0x11}},
-    {'O', {0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E}},
-    {'P', {0x1E, 0x11, 0x11, 0x1E, 0x10, 0x10, 0x10}},
-    {'Q', {0x0E, 0x11, 0x11, 0x11, 0x15, 0x12, 0x0D}},
-    {'R', {0x1E, 0x11, 0x11, 0x1E, 0x14, 0x12, 0x11}},
-    {'S', {0x0F, 0x10, 0x10, 0x0E, 0x01, 0x01, 0x1E}},
-    {'T', {0x1F, 0x04, 0x04, 0x04, 0x04, 0x04, 0x04}},
-    {'U', {0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E}},
-    {'V', {0x11, 0x11, 0x11, 0x11, 0x11, 0x0A, 0x04}},
-    {'W', {0x11, 0x11, 0x11, 0x15, 0x15, 0x1B, 0x11}},
-    {'X', {0x11, 0x11, 0x0A, 0x04, 0x0A, 0x11, 0x11}},
-    {'Y', {0x11, 0x11, 0x0A, 0x04, 0x04, 0x04, 0x04}},
-    {'Z', {0x1F, 0x01, 0x02, 0x04, 0x08, 0x10, 0x1F}},
-};
-
-constexpr uint16_t kBackground = 0x0000;  //  纯黑页面背景 / Pure-black page background
-constexpr uint16_t kCardFill = OmiPetDisplay::Display::color565(190, 195, 202);  //  淡灰卡片填充色 / Light-gray card fill color
-constexpr uint16_t kCardText = OmiPetDisplay::Display::color565(20, 27, 36);  //  卡片深色文字 / Dark card text color
-constexpr uint16_t kAccent = OmiPetDisplay::Display::color565(72, 220, 255);  //  UI 强调色 / UI accent color
-constexpr uint16_t kWhite = OmiPetDisplay::Display::color565(245, 248, 255);  //  UI 白色文字颜色 / UI white text color
-constexpr uint16_t kGreen = OmiPetDisplay::Display::color565(100, 235, 150);  //  正常状态颜色 / Normal-status color
-constexpr uint16_t kYellow = OmiPetDisplay::Display::color565(255, 220, 80);  //  提示状态颜色 / Attention-status color
-constexpr uint16_t kRed = OmiPetDisplay::Display::color565(255, 90, 90);  //  错误状态颜色 / Error-status color
-constexpr uint16_t kPanelLine = OmiPetDisplay::Display::color565(30, 70, 100);  //  模块边框颜色 / Module-border color
-
-constexpr int16_t kScreenWidth = OmiPetDisplay::kPanelHeight;  //  横屏逻辑宽度 / Landscape logical width
-constexpr int16_t kScreenHeight = OmiPetDisplay::kPanelWidth;  //  横屏逻辑高度 / Landscape logical height
-constexpr int16_t kSideCardWidth = 106;
-constexpr int16_t kSideCardHeight = 63;
-constexpr int16_t kSideCardLeft = 4;
-constexpr int16_t kSideCardRight = kScreenWidth - kSideCardLeft - kSideCardWidth;
-constexpr int16_t kTopCardY = 5;
-constexpr int16_t kBottomCardY = kScreenHeight - kSideCardHeight - kTopCardY;
-constexpr int16_t kCenterCardLeft = kSideCardLeft + kSideCardWidth + 6;
-constexpr int16_t kCenterCardTop = kTopCardY;
-constexpr int16_t kCenterCardWidth =
-    kSideCardRight - kCenterCardLeft - 6;
-constexpr int16_t kCenterCardHeight = kScreenHeight - kTopCardY * 2;
-constexpr int16_t kCardRadius = 9;
-char gRenderedClockText[6] = {};
-char gRenderedDateText[11] = {};
-char gRenderedPairingCountdown[6] = {};
-bool gDateTimeRendered = false;
-bool gPairingCountdownRendered = false;
-bool gPairingVisible = false;
-bool gTaskEnabled = false;
-bool gTaskConnected = false;
-bool gTaskDirty = false;
-bool gTaskRendered = false;
-OmiPetProtocol::TaskScreen gRenderedTaskScreen;
-//  固定区域缓冲，避免先擦除再画字；不占用音频栈 / Fixed region buffer avoids erase-before-text and audio-stack allocation
-uint16_t gTaskBuffer[206 * 50];
-bool gTaskBuffering = false;
-int16_t gBufferX = 0, gBufferY = 0, gBufferWidth = 0, gBufferHeight = 0;
-
-void taskPixel(int x, int y, uint16_t color) {
-  if (x >= gBufferX && y >= gBufferY && x < gBufferX + gBufferWidth && y < gBufferY + gBufferHeight)
-    gTaskBuffer[(y - gBufferY) * gBufferWidth + x - gBufferX] = color;
+Page page() {
+  if (gState.pairingSeconds) return Page::Pairing;
+  if (gState.tasks) return Page::Tasks;
+  if (std::strcmp(gState.voice, "LISTENING") == 0) return Page::Listening;
+  return Page::Dashboard;
 }
-void uiBitmap(int16_t x, int16_t y, uint16_t width, uint16_t height, const uint16_t* pixels) {
-  if (!gTaskBuffering) { OmiPetDisplay::lcd.drawBitmap(x, y, width, height, pixels); return; }
-  for (unsigned row = 0; row < height; ++row)
-    for (unsigned col = 0; col < width; ++col) taskPixel(x + col, y + row, pixels[row * width + col]);
+
+void pixel(int x, int y, uint16_t color) {
+  if (x >= gX && x < gX + gWidth && y >= gY && y < gY + gHeight)
+    gBuffer[(y - gY) * gWidth + x - gX] = color;
 }
-void taskFrame(int x, int y) {
-  constexpr int radius = 9, width = 206, height = 50;
-  for (int col = radius; col < width - radius; ++col) {
-    taskPixel(x + col, y, kPanelLine); taskPixel(x + col, y + height - 1, kPanelLine);
-  }
-  for (int row = radius; row < height - radius; ++row) {
-    taskPixel(x, y + row, kPanelLine); taskPixel(x + width - 1, y + row, kPanelLine);
-  }
-  for (int row = 0; row < radius; ++row) for (int col = 0; col < radius; ++col) {
-    const int d = (radius - col) * (radius - col) + (radius - row) * (radius - row);
-    if (d >= (radius - 1) * (radius - 1) && d <= radius * radius) {
-      taskPixel(x + col, y + row, kPanelLine); taskPixel(x + width - 1 - col, y + row, kPanelLine);
-      taskPixel(x + col, y + height - 1 - row, kPanelLine); taskPixel(x + width - 1 - col, y + height - 1 - row, kPanelLine);
+
+void rect(int x, int y, int width, int height, uint16_t color, int radius = 0) {
+  const int left = std::max(x, gX), right = std::min(x + width, gX + gWidth);
+  const int top = std::max(y, gY), bottom = std::min(y + height, gY + gHeight);
+  for (int row = top; row < bottom; ++row) {
+    for (int col = left; col < right; ++col) {
+      if (radius) {
+        const int dx = std::max(std::max(x + radius - col, col - (x + width - 1 - radius)), 0);
+        const int dy = std::max(std::max(y + radius - row, row - (y + height - 1 - radius)), 0);
+        if (dx * dx + dy * dy > radius * radius) continue;
+      }
+      pixel(col, row, color);
     }
   }
 }
-OmiPetProtocol::TaskScreen gTaskScreen;
 
-bool taskPageVisible() { return gTaskEnabled && !gPairingVisible; }
-char gPairingCode[7] = {};
-char gPairingAddress[16] = {};
-uint16_t gPairingSecondsRemaining = 0;
-bool gDateTimeValid = false;
-int gDateTimeYear = 0;
-int gDateTimeMonth = 0;
-int gDateTimeDay = 0;
-int gDateTimeHour = 0;
-int gDateTimeMinute = 0;
-bool gUiStarted = false;
-bool gEnvironmentValid = false;
-float gTemperatureC = 0.0F;
-float gHumidityPercent = 0.0F;
-bool gBatteryValid = false;
-uint8_t gBatteryPercent = 0;
-bool gNetworkConnected = false;
-bool gNetworkProvisioning = false;
-char gWifiName[33] = {};
-const char* gVoiceStatus = "IDLE";
-uint16_t gGlyphBitmap[20 * 28] = {};
-
-//  查找内置字模 / Find a glyph in the built-in font
-const Glyph* findGlyph(char character) {
-  if (character >= 'a' && character <= 'z') {
-    character = static_cast<char>(character - ('a' - 'A'));
-  }
-  for (const Glyph& glyph : kFont) {
-    if (glyph.character == character) {
-      return &glyph;
-    }
-  }
-  return &kFont[0];
+uint16_t blend(uint16_t foreground, uint16_t background, unsigned alpha) {
+  const unsigned inverse = 15 - alpha;
+  const unsigned r = (((foreground >> 11) * alpha + (background >> 11) * inverse + 7) / 15);
+  const unsigned g = ((((foreground >> 5) & 63) * alpha + ((background >> 5) & 63) * inverse + 7) / 15);
+  const unsigned b = (((foreground & 31) * alpha + (background & 31) * inverse + 7) / 15);
+  return static_cast<uint16_t>((r << 11) | (g << 5) | b);
 }
 
-//  计算一行文本按指定缩放比例绘制时的像素宽度 / Calculate the pixel width of text at the requested scale
-int16_t textWidth(const char* text, uint8_t scale) {
-  const size_t length = std::strlen(text);
-  if (length == 0) {
-    return 0;
+//  只解码本地固定文案；动态任务标题仍沿用主机单色位图 / Decode local fixed labels only; dynamic task titles remain host monochrome bitmaps
+uint32_t codepoint(const char*& text) {
+  const auto first = static_cast<uint8_t>(*text++);
+  if (first < 128) return first;
+  unsigned remaining = first >= 0xE0 ? 2 : 1;
+  uint32_t value = first & (remaining == 2 ? 15 : 31);
+  while (remaining--) {
+    const auto next = static_cast<uint8_t>(*text);
+    if ((next & 0xC0) != 0x80) return '?';
+    value = (value << 6) | (next & 63);
+    ++text;
   }
-  return static_cast<int16_t>((length * 6U - 1U) * scale);
+  return value;
 }
 
-//  从指定左上角绘制一行文本 / Draw one line of text from the specified top-left position
-void drawText(int16_t x, int16_t y, const char* text, uint8_t scale,
-              uint16_t color, uint16_t backgroundColor = kBackground) {
-  const uint16_t glyphWidth = static_cast<uint16_t>(5U * scale);
-  const uint16_t glyphHeight = static_cast<uint16_t>(7U * scale);
-  for (size_t characterIndex = 0; text[characterIndex] != '\0';
-       ++characterIndex) {
-    const Glyph* glyph = findGlyph(text[characterIndex]);
-    for (uint8_t row = 0; row < 7; ++row) {
-      for (uint8_t column = 0; column < 5; ++column) {
-        const uint16_t pixelColor =
-            (glyph->rows[row] & (0x10U >> column)) != 0 ? color : backgroundColor;
-        for (uint8_t scaleY = 0; scaleY < scale; ++scaleY) {
-          for (uint8_t scaleX = 0; scaleX < scale; ++scaleX) {
-            const uint16_t bitmapX =
-                static_cast<uint16_t>(column * scale + scaleX);
-            const uint16_t bitmapY =
-                static_cast<uint16_t>(row * scale + scaleY);
-            gGlyphBitmap[bitmapY * glyphWidth + bitmapX] = pixelColor;
-          }
+const OmiPetUiFont::Glyph* glyph(uint32_t code, uint8_t size) {
+  size_t left = 0, right = sizeof(OmiPetUiFont::kGlyphs) / sizeof(OmiPetUiFont::kGlyphs[0]);
+  while (left < right) {
+    const size_t middle = (left + right) / 2;
+    const auto& candidate = OmiPetUiFont::kGlyphs[middle];
+    if (candidate.size < size || (candidate.size == size && candidate.codepoint < code)) left = middle + 1;
+    else right = middle;
+  }
+  if (left < sizeof(OmiPetUiFont::kGlyphs) / sizeof(OmiPetUiFont::kGlyphs[0])) {
+    const auto& candidate = OmiPetUiFont::kGlyphs[left];
+    if (candidate.size == size && candidate.codepoint == code) return &candidate;
+  }
+  return nullptr;
+}
+
+int textWidth(const char* text, uint8_t size) {
+  int width = 0;
+  while (*text) {
+    const auto* item = glyph(codepoint(text), size);
+    width += item ? item->advance : size;
+  }
+  return width;
+}
+
+void text(const char* value, int x, int baseline, uint8_t size = 14, uint16_t color = kText) {
+  while (*value) {
+    const auto* item = glyph(codepoint(value), size);
+    if (!item) { x += size; continue; }
+    const int left = x + item->left, top = baseline + item->top;
+    for (int row = std::max(top, gY); row < std::min(top + item->height, gY + gHeight); ++row) {
+      for (int col = std::max(left, gX); col < std::min(left + item->width, gX + gWidth); ++col) {
+        const unsigned offset = (row - top) * item->width + col - left;
+        const uint8_t packed = OmiPetUiFont::kPixels[item->offset + offset / 2];
+        const unsigned alpha = offset % 2 ? packed & 15 : packed >> 4;
+        if (alpha) {
+          const uint16_t background = gBuffer[(row - gY) * gWidth + col - gX];
+          pixel(col, row, blend(color, background, alpha));
         }
       }
     }
-    uiBitmap(x, y, glyphWidth, glyphHeight,
-                                  gGlyphBitmap);
-    x += static_cast<int16_t>(6 * scale);
+    x += item->advance;
   }
 }
 
-//  在指定矩形区域内水平居中绘制文本 / Draw text centered horizontally inside a specified rectangle
-void drawCenteredTextInArea(int16_t left, int16_t width, int16_t y,
-                            const char* text, uint8_t scale,
-                            uint16_t color,
-                            uint16_t backgroundColor = kBackground) {
-  const int16_t textPixelWidth = textWidth(text, scale);
-  drawText(left + (width - textPixelWidth) / 2, y, text, scale, color,
-           backgroundColor);
+void centered(const char* value, int baseline, uint8_t size, uint16_t color = kText) {
+  text(value, (kWidth - textWidth(value, size)) / 2, baseline, size, color);
 }
 
-//  根据同步状态格式化时间和日期文本 / Format time and date text from synchronization state
-void formatDateTimeTexts(char* clockText, size_t clockTextSize, char* dateText,
-                         size_t dateTextSize) {
-  if (!gDateTimeValid) {
-    std::snprintf(clockText, clockTextSize, "--:--");
-    std::snprintf(dateText, dateTextSize, "----/--/--");
+void face(int x, int y, bool listening) {
+  rect(x, y, 66, 56, kSurface, 18);
+  rect(x + 15, y + 18, 8, listening ? 18 : 13, kAccent, 4);
+  rect(x + 43, y + 18, 8, listening ? 18 : 13, kAccent, 4);
+  rect(x + 29, y + 39, 2, 3, kAccent);
+  rect(x + 31, y + 41, 6, 2, kAccent);
+  rect(x + 37, y + 39, 2, 3, kAccent);
+}
+
+const char* voiceLabel() {
+  if (std::strcmp(gState.voice, "LISTENING") == 0) return "正在聆听";
+  if (std::strcmp(gState.voice, "PAIR UNREADY") == 0) return "配对未就绪";
+  if (std::strcmp(gState.voice, "IDLE") == 0) return "语音就绪";
+  return gState.voice;
+}
+
+void header(Page current) {
+  rect(11, 10, 6, 6, kAccent, 3);
+  text("Omi", 23, 18, 14);
+  char label[48] = {};
+  if (current == Page::Tasks) {
+    std::snprintf(label, sizeof(label), "Codex  %u %s", gTasks.active, "活动");
+  } else {
+    std::snprintf(label, sizeof(label), "%s", current == Page::Pairing ? "设备配对" : current == Page::Listening ? "离线语音" : "桌面伙伴");
+  }
+  text(label, 57, 19, 14, kMuted);
+  const char* network = gState.network ? "已连接" : gState.provisioning ? "配网中" : "离线";
+  text(network, 294 - textWidth(network, 14), 19, 14, gState.network ? kAccent : kMuted);
+  rect(299, 8, 1, 12, kLine);
+  const char* voice = voiceLabel();
+  if (textWidth(voice, 14) <= 70) text(voice, 305, 19, 14, kMuted);
+  else text("VOICE", 305, 19, 14, kMuted);
+  rect(380, 7, 24, 12, kLine, 3);
+  rect(405, 11, 2, 4, kMuted);
+  if (gState.batteryValid) {
+    const auto color = gState.battery <= 20 ? kRed : gState.battery <= 40 ? kAmber : kAccent;
+    rect(382, 9, (20 * gState.battery + 50) / 100, 8, color, 1);
+  } else text("?", 389, 17, 11, kMuted);
+  rect(12, 25, 404, 1, kLine);
+}
+
+void dashboard() {
+  face(18, 56, false);
+  text(gState.clock, 101, 88, 43);
+  text(gState.date, 104, 111, 11, kMuted);
+  rect(257, 43, 1, 85, kLine);
+  text("温度", 274, 52, 14, kMuted);
+  text(gState.temperature, 274, 78, 24);
+  text("°C", 280 + textWidth(gState.temperature, 24), 77, 11, kMuted);
+  text("湿度", 274, 99, 14, kMuted);
+  text(gState.humidity, 274, 125, 24);
+  text("%", 280 + textWidth(gState.humidity, 24), 124, 11, kMuted);
+  if (!gState.timeValid) text("等待联网校时", 332, 137, 14, kMuted);
+}
+
+void monochrome(const uint8_t* pixels, int x, int y, int width, int height, uint16_t color) {
+  for (int row = std::max(y, gY); row < std::min(y + height, gY + gHeight); ++row) {
+    for (int col = std::max(x, gX); col < std::min(x + width, gX + gWidth); ++col) {
+      const unsigned bit = (row - y) * width + col - x;
+      if (pixels[bit / 8] & (0x80U >> (bit % 8))) pixel(col, row, color);
+    }
+  }
+}
+
+void tasks() {
+  if (!gTasks.available) { centered("无任务", 83, 14, kAmber); return; }
+  if (!gTasks.active) { centered("暂无活动任务", 83, 14, kMuted); return; }
+  for (unsigned i = 0; i < 4; ++i) {
+    const auto& card = gTasks.cards[i];
+    if (!card.used) continue;
+    const int x = 12 + (i % 2) * 208, y = 31 + (i / 2) * 49;
+    const auto color = card.waiting ? kAmber : kRed;
+    rect(x, y, 196, 45, kSurface, 7);
+    rect(x, y + 9, 3, 29, color, 1);
+    bool ink = false;
+    for (uint8_t byte : card.pixels) ink = ink || byte != 0;
+    if (ink) monochrome(card.pixels, x + 12, y + 4, 160, 16, kText);
+    else text("标题不可用", x + 12, y + 18, 14, kMuted);
+    if (gTasks.hasLabels) monochrome(gTasks.labels + (card.waiting ? 0 : 128), x + 12, y + 26, 64, 16, color);
+    else text(card.waiting ? "等待操作" : "正在处理", x + 12, y + 39, 14, color);
+    char number[3];
+    std::snprintf(number, sizeof(number), "%02u", i + 1);
+    text(number, x + 174, y + 38, 11, kMuted);
+  }
+  if (gTasks.active > 4) {
+    char more[32];
+    std::snprintf(more, sizeof(more), "+%u %s", gTasks.active - 4, "更多活动任务");
+    text(more, 12, 139, 14, kAmber);
+  }
+}
+
+void listening() {
+  face(23, 52, true);
+  text("我在听", 111, 69, 27);
+  text("试试说「亮一点」", 111, 98, 14, kMuted);
+  const int heights[] = {12, 24, 38, 28, 16};
+  for (unsigned i = 0; i < 5; ++i) rect(332 + i * 11, 81 - heights[i] / 2, 5, heights[i], kAccent, 2);
+  text("离线语音", 358, 120, 14, kMuted);
+}
+
+void pairing() {
+  centered("在电脑端输入配对码", 48, 14, kMuted);
+  char code[8];
+  std::snprintf(code, sizeof(code), "%.3s %.3s", gState.pairingCode, gState.pairingCode + 3);
+  centered(code, 91, 39);
+  text(gState.pairingAddress, 19, 127, 11, kMuted);
+  char remaining[32];
+  std::snprintf(remaining, sizeof(remaining), "%02u:%02u %s", gState.pairingSeconds / 60, gState.pairingSeconds % 60, "后失效");
+  text(remaining, 308, 125, 14, kAmber);
+}
+
+void drawPage() {
+  const Page current = page();
+  header(current);
+  if (current == Page::Dashboard) dashboard();
+  else if (current == Page::Tasks) tasks();
+  else if (current == Page::Listening) listening();
+  else pairing();
+}
+
+//  按缓冲容量分块合成，不先擦屏 / Composite regions within the buffer capacity without erase-first
+void flush(int x, int y, int width, int height) {
+  const int rows = static_cast<int>(sizeof(gBuffer) / sizeof(gBuffer[0])) / width;
+  for (int top = y; top < y + height; top += rows) {
+    gX = x; gY = top; gWidth = width; gHeight = std::min(rows, y + height - top);
+    std::fill_n(gBuffer, gWidth * gHeight, kBackground);
+    drawPage();
+    OmiPetDisplay::lcd.drawBitmap(gX, gY, gWidth, gHeight, gBuffer);
+  }
+}
+
+bool changed(const char* a, const char* b) { return std::strcmp(a, b) != 0; }
+
+bool sameState() {
+  if (changed(gState.temperature, gRendered.temperature) || changed(gState.humidity, gRendered.humidity) ||
+      changed(gState.clock, gRendered.clock) || changed(gState.date, gRendered.date) ||
+      changed(gState.voice, gRendered.voice) || changed(gState.pairingCode, gRendered.pairingCode) ||
+      changed(gState.pairingAddress, gRendered.pairingAddress) || gState.timeValid != gRendered.timeValid ||
+      gState.network != gRendered.network || gState.provisioning != gRendered.provisioning ||
+      gState.batteryValid != gRendered.batteryValid || gState.battery != gRendered.battery ||
+      gState.tasks != gRendered.tasks || gState.pairingSeconds != gRendered.pairingSeconds ||
+      gTasks.available != gRenderedTasks.available || gTasks.active != gRenderedTasks.active ||
+      gTasks.hasLabels != gRenderedTasks.hasLabels ||
+      std::memcmp(gTasks.labels, gRenderedTasks.labels, sizeof(gTasks.labels)) != 0) return false;
+  for (unsigned i = 0; i < 4; ++i)
+    if (gTasks.cards[i].used != gRenderedTasks.cards[i].used || gTasks.cards[i].waiting != gRenderedTasks.cards[i].waiting ||
+        std::memcmp(gTasks.cards[i].pixels, gRenderedTasks.cards[i].pixels, sizeof(gTasks.cards[i].pixels)) != 0) return false;
+  return true;
+}
+
+void refresh() {
+  if (!gStarted) return;
+  const Page current = page();
+  const bool full = !gRenderedValid || current != gRenderedPage ||
+      (current == Page::Tasks && (gTasks.available != gRenderedTasks.available ||
+                                 (gTasks.active == 0) != (gRenderedTasks.active == 0)));
+  if (full || gFullRow >= 0) {
+    if (gFullRow < 0 || current != gRenderedPage) {
+      gFullRow = 0;
+      gFullStale = false;
+      gRendered = gState;
+      gRenderedTasks = gTasks;
+      gRenderedPage = current;
+    }
+    //  每轮只传一块，避免唤醒绘制拖长确认音；中途更新后补绘 / Transfer one chunk per loop to protect acknowledgement timing; repaint if data changes mid-transition
+    gFullStale = gFullStale || !sameState();
+    constexpr int kRows = sizeof(gBuffer) / sizeof(gBuffer[0]) / kWidth;
+    const int height = std::min(kRows, kHeight - gFullRow);
+    flush(0, gFullRow, kWidth, height);
+    gFullRow += height;
+    if (gFullRow == kHeight) {
+      gFullRow = -1;
+      gRenderedValid = !gFullStale;
+    }
     return;
   }
-
-  std::snprintf(clockText, clockTextSize, "%02d:%02d", gDateTimeHour,
-                gDateTimeMinute);
-  std::snprintf(dateText, dateTextSize, "%04d/%02d/%02d", gDateTimeYear,
-                gDateTimeMonth, gDateTimeDay);
-}
-
-//  更新一行文本，只重绘发生变化的字符 / Update one line and redraw only changed characters
-void drawChangedText(int16_t x, int16_t y, const char* text, uint8_t scale,
-                     char* renderedText, size_t renderedTextSize,
-                     uint16_t color, bool rendered) {
-  for (size_t index = 0; text[index] != '\0'; ++index) {
-    if (!rendered || text[index] != renderedText[index]) {
-      char changedCharacter[2] = {text[index], '\0'};
-      drawText(x + static_cast<int16_t>(index * 6U * scale), y,
-               changedCharacter, scale, color, kBackground);
-    }
-  }
-  std::strncpy(renderedText, text, renderedTextSize - 1U);
-  renderedText[renderedTextSize - 1U] = '\0';
-}
-
-//  更新时间和日期，只重绘发生变化的字符 / Update time and date, redrawing only changed characters
-void drawDateTime() {
-  if (gPairingVisible || taskPageVisible()) return;
-  char clockText[6] = {};
-  char dateText[11] = {};
-  formatDateTimeTexts(clockText, sizeof(clockText), dateText, sizeof(dateText));
-  constexpr uint8_t kClockScale = 4;
-  constexpr int16_t kClockY = 53;
-  const int16_t clockX = kCenterCardLeft +
-      (kCenterCardWidth - textWidth(clockText, kClockScale)) / 2;
-  drawChangedText(clockX, kClockY, clockText, kClockScale, gRenderedClockText,
-                  sizeof(gRenderedClockText), kWhite, gDateTimeRendered);
-
-  constexpr uint8_t kDateScale = 1;
-  constexpr int16_t kDateY = 104;
-  const int16_t dateX = kCenterCardLeft +
-      (kCenterCardWidth - textWidth(dateText, kDateScale)) / 2;
-  drawChangedText(dateX, kDateY, dateText, kDateScale, gRenderedDateText,
-                  sizeof(gRenderedDateText), kWhite, gDateTimeRendered);
-  gDateTimeRendered = true;
-}
-
-//  只刷新配对倒计时中发生变化的数字 / Refresh only the changed pairing-countdown digits
-void drawPairingCountdown() {
-  char countdown[6] = "00:00";
-  const uint8_t minutes =
-      static_cast<uint8_t>((gPairingSecondsRemaining / 60U) % 100U);
-  const uint8_t seconds =
-      static_cast<uint8_t>(gPairingSecondsRemaining % 60U);
-  countdown[0] = static_cast<char>('0' + minutes / 10U);
-  countdown[1] = static_cast<char>('0' + minutes % 10U);
-  countdown[3] = static_cast<char>('0' + seconds / 10U);
-  countdown[4] = static_cast<char>('0' + seconds % 10U);
-  constexpr uint8_t kScale = 2;
-  const int16_t x = kCenterCardLeft +
-      (kCenterCardWidth - textWidth(countdown, kScale)) / 2;
-  drawChangedText(x, 108, countdown, kScale, gRenderedPairingCountdown,
-                  sizeof(gRenderedPairingCountdown), kYellow,
-                  gPairingCountdownRendered);
-  gPairingCountdownRendered = true;
-}
-
-//  在中央卡片单独绘制配对码，避免侧边状态和语音提示被覆盖 / Draw the pairing code in the center card without covering side status or voice feedback
-void drawPairingCard() {
-  OmiPetDisplay::lcd.fillRect(kCenterCardLeft + 2, kCenterCardTop + 2,
-                              kCenterCardWidth - 4, kCenterCardHeight - 4,
-                              kBackground);
-  drawCenteredTextInArea(kCenterCardLeft, kCenterCardWidth, 20,
-                         "PAIR CODE", 1, kAccent);
-  drawCenteredTextInArea(kCenterCardLeft, kCenterCardWidth, 51,
-                         gPairingCode, 4, kWhite);
-  drawCenteredTextInArea(kCenterCardLeft, kCenterCardWidth, 91,
-                         gPairingAddress[0] ? gPairingAddress : "EXPIRES", 1, kYellow);
-  gPairingCountdownRendered = false;
-  drawPairingCountdown();
-}
-
-//  把摄氏温度格式化为带一位小数的屏幕文本 / Format Celsius temperature as one-decimal display text
-void formatTemperature(float temperatureC, char* output, size_t outputSize) {
-  int32_t tenths = static_cast<int32_t>(temperatureC * 10.0F +
-                                        (temperatureC >= 0.0F ? 0.5F : -0.5F));
-  const bool negative = tenths < 0;
-  const uint32_t absoluteTenths =
-      static_cast<uint32_t>(negative ? -tenths : tenths);
-  const uint32_t whole = absoluteTenths / 10U;
-  const uint32_t fraction = absoluteTenths % 10U;
-  if (negative) {
-    std::snprintf(output, outputSize, "T -%lu.%luC",
-                  static_cast<unsigned long>(whole),
-                  static_cast<unsigned long>(fraction));
-  } else {
-    std::snprintf(output, outputSize, "T %lu.%luC",
-                  static_cast<unsigned long>(whole),
-                  static_cast<unsigned long>(fraction));
-  }
-}
-
-//  准备温湿度显示字符串，无效时生成占位文本 / Prepare environment strings or placeholders when invalid
-void formatEnvironmentValues(bool valid, float temperatureC,
-                             float humidityPercent, char* temperatureText,
-                             size_t temperatureSize, char* humidityText,
-                             size_t humiditySize) {
-  if (valid) {
-    formatTemperature(temperatureC, temperatureText, temperatureSize);
-    const int32_t humidity = static_cast<int32_t>(humidityPercent + 0.5F);
-    std::snprintf(humidityText, humiditySize, "H %ld%%",
-                  static_cast<long>(humidity));
-  } else {
-    std::strncpy(temperatureText, "T --C", temperatureSize - 1U);
-    std::strncpy(humidityText, "H --%", humiditySize - 1U);
-  }
-}
-
-//  只刷新温湿度卡片中发生变化的数值区域 / Refresh only changed value areas in the environment card
-void drawEnvironmentValues(bool drawTemperature, bool drawHumidity) {
-  char temperatureText[12] = {};
-  char humidityText[10] = {};
-  formatEnvironmentValues(gEnvironmentValid, gTemperatureC, gHumidityPercent,
-                          temperatureText, sizeof(temperatureText),
-                          humidityText, sizeof(humidityText));
-  const int16_t x = kSideCardLeft;
-  const int16_t y = kTopCardY;
-  if (drawTemperature) {
-    OmiPetDisplay::lcd.fillRect(x + 5, y + 27, kSideCardWidth - 10, 10,
-                                kBackground);
-    drawText(x + 5 + (kSideCardWidth - 10 - textWidth(temperatureText, 1)) / 2,
-             y + 28, temperatureText, 1, kWhite, kBackground);
-  }
-  if (drawHumidity) {
-    OmiPetDisplay::lcd.fillRect(x + 5, y + 43, kSideCardWidth - 10, 10,
-                                kBackground);
-    drawText(x + 5 + (kSideCardWidth - 10 - textWidth(humidityText, 1)) / 2,
-             y + 44, humidityText, 1, kWhite, kBackground);
-  }
-}
-
-//  绘制模块边框和标题 / Draw a module frame and title
-void drawModuleFrame(int16_t x, int16_t y, int16_t width, int16_t height,
-                     const char* title, uint16_t titleColor) {
-  OmiPetDisplay::lcd.drawRoundRect(x, y, width, height, kCardRadius, kPanelLine,
-                                   kBackground);
-  drawText(x + 7, y + 8, title, 1, titleColor, kBackground);
-}
-
-//  绘制温湿度卡片及其当前数值 / Draw the environment card and current values
-void drawEnvironment() {
-  drawModuleFrame(kSideCardLeft, kTopCardY, kSideCardWidth, kSideCardHeight,
-                  "ENVIRONMENT", kGreen);
-  drawEnvironmentValues(true, true);
-}
-
-//  绘制网络卡片，并按需创建卡片边框 / Draw the network card and optionally create its frame
-void drawNetworkStatus(bool drawFrame) {
-  const char* statusText = "WIFI NOT";
-  uint16_t statusColor = kRed;
-  if (gNetworkConnected) {
-    statusText = gWifiName[0] != '\0' ? gWifiName : "WIFI CONNECTED";
-    statusColor = kGreen;
-  }
-
-  const int16_t x = kSideCardLeft;
-  const int16_t y = kBottomCardY;
-  if (drawFrame) {
-    drawModuleFrame(x, y, kSideCardWidth, kSideCardHeight, "NETWORK", kAccent);
-  }
-  OmiPetDisplay::lcd.fillRect(x + 5, y + 28, kSideCardWidth - 10, 24,
-                              kBackground);
-  if (gNetworkConnected) {
-    char displayName[17] = {};
-    std::strncpy(displayName, statusText, sizeof(displayName) - 1U);
-    if (std::strlen(statusText) >= sizeof(displayName)) {
-      displayName[13] = '.';
-      displayName[14] = '.';
-      displayName[15] = '.';
-      displayName[16] = '\0';
-    }
-    drawCenteredTextInArea(x + 5, kSideCardWidth - 10, y + 35, displayName,
-                           1, statusColor, kBackground);
-  } else {
-    drawCenteredTextInArea(x + 5, kSideCardWidth - 10, y + 31, statusText, 1,
-                           statusColor, kBackground);
-    drawCenteredTextInArea(x + 5, kSideCardWidth - 10, y + 43, "CONNECTED", 1,
-                           statusColor, kBackground);
-  }
-}
-
-//  绘制语音状态卡片，并按需创建卡片边框 / Draw the voice card and optionally create its frame
-void drawVoiceStatus(bool drawFrame) {
-  const int16_t x = kSideCardRight;
-  const int16_t y = kTopCardY;
-  if (drawFrame) {
-    drawModuleFrame(x, y, kSideCardWidth, kSideCardHeight, "VOICE", kYellow);
-  }
-  OmiPetDisplay::lcd.fillRect(x + 5, y + 30, kSideCardWidth - 10, 17,
-                              kBackground);
-  drawCenteredTextInArea(x + 5, kSideCardWidth - 10, y + 35, gVoiceStatus, 1,
-                         kYellow, kBackground);
-}
-
-//  仅绘制电池百分比，并按需创建卡片边框 / Draw only the battery percentage and optionally create its frame
-void drawBatteryStatus(bool drawFrame) {
-  const int16_t x = kSideCardRight;
-  const int16_t y = kBottomCardY;
-  if (drawFrame) {
-    drawModuleFrame(x, y, kSideCardWidth, kSideCardHeight, "BATTERY", kYellow);
-  }
-  OmiPetDisplay::lcd.fillRect(x + 5, y + 28, kSideCardWidth - 10, 24,
-                              kBackground);
-  char percentText[8] = {};
-  if (gBatteryValid) {
-    std::snprintf(percentText, sizeof(percentText), "%u%%",
-                  static_cast<unsigned>(gBatteryPercent));
-  } else {
-    std::snprintf(percentText, sizeof(percentText), "--%%");
-  }
-  const uint16_t percentColor =
-      !gBatteryValid || gBatteryPercent <= 20U ? kRed
-      : gBatteryPercent <= 40U                  ? kYellow
-                                                : kGreen;
-  drawCenteredTextInArea(x + 5, kSideCardWidth - 10, y + 35, percentText, 1,
-                         percentColor, kBackground);
-}
-
-//  绘制仪表盘首屏和所有静态卡片 / Draw the dashboard first frame and all static cards
-void drawStaticUi() {
-  OmiPetDisplay::lcd.fillScreen(kBackground);
-  drawModuleFrame(kCenterCardLeft, kCenterCardTop, kCenterCardWidth,
-                  kCenterCardHeight, "", kAccent);
-  if (gPairingVisible) {
-    drawPairingCard();
-  } else {
-    drawCenteredTextInArea(kCenterCardLeft, kCenterCardWidth, 19, "OMIPET", 1,
-                           kAccent, kBackground);
-    drawDateTime();
-  }
-
-  drawEnvironment();
-  drawNetworkStatus(true);
-  drawVoiceStatus(true);
-  drawBatteryStatus(true);
-}
-//  四张固定位置的任务气泡；标题不写入设备日志 / Four fixed task bubbles; titles are never written to device logs
-void drawTaskScreen(unsigned part) {
-  if (part == 0) {
-    drawText(8, 5, "CODEX", 1, kAccent);
-    if (!gTaskConnected) {
-      drawCenteredTextInArea(0, kScreenWidth, 65, "CONNECTION LOST", 2, kRed);
-      return;
-    }
-    if (!gTaskScreen.available) {
-      drawCenteredTextInArea(0, kScreenWidth, 65, "TASK SOURCE UNAVAILABLE", 1, kYellow);
-      return;
-    }
-    char total[24];
-    std::snprintf(total, sizeof(total), "ACTIVE %u%s", gTaskScreen.active, gTaskScreen.active > 4 ? "  MORE" : "");
-    drawText(270, 5, total, 1, kWhite);
-    if (!gTaskScreen.active) {
-      drawCenteredTextInArea(0, kScreenWidth, 65, "NO ACTIVE TASKS", 2, kGreen);
-      return;
-    }
-    if (gTaskScreen.active > 4) {
-      char more[24];
-      std::snprintf(more, sizeof(more), "MORE %u ACTIVE", gTaskScreen.active - 4);
-      drawText(8, 132, more, 1, kYellow);
-    }
-  }
-  if (!gTaskConnected || !gTaskScreen.available || !gTaskScreen.active || part == 0) return;
-  for (unsigned slot = 0; slot < 4; ++slot) {
-    if (slot != part - 1) continue;
-    const auto& card = gTaskScreen.cards[slot];
-    if (!card.used) continue;
-    const int16_t x = 4 + (slot % 2) * 214;
-    const int16_t y = 21 + (slot / 2) * 54;
-    taskFrame(x, y);
-    bool ink = false;
-    uint16_t row[160];
-    for (unsigned line = 0; line < 16; ++line) {
-      for (unsigned col = 0; col < 160; ++col) {
-        const unsigned bit = line * 160 + col;
-        const bool on = card.pixels[bit / 8] & (0x80U >> (bit % 8));
-        ink = ink || on;
-        row[col] = on ? kWhite : kBackground;
-      }
-      uiBitmap(x + 10, y + 6 + line, 160, 1, row);
-    }
-    if (!ink) drawText(x + 10, y + 10, "TITLE UNAVAILABLE", 1, kWhite);
-    if (gTaskScreen.hasLabels) {
-      const auto* label = gTaskScreen.labels + (card.waiting ? 0 : 128);
-      for (unsigned line = 0; line < 16; ++line) {
-        for (unsigned col = 0; col < 64; ++col) {
-          const unsigned bit = line * 64 + col;
-          row[col] = label[bit / 8] & (0x80U >> (bit % 8)) ? (card.waiting ? kYellow : kRed) : kBackground;
+  else {
+    if (gState.network != gRendered.network || gState.provisioning != gRendered.provisioning)
+      flush(250, 4, 45, 19);
+    if (gState.battery != gRendered.battery || gState.batteryValid != gRendered.batteryValid)
+      flush(378, 4, 32, 19);
+    if (changed(gState.voice, gRendered.voice)) flush(305, 4, 70, 19);
+    if (current == Page::Tasks && gTasks.active != gRenderedTasks.active) flush(55, 4, 190, 19);
+    if (current == Page::Dashboard) {
+      if (gState.timeValid != gRendered.timeValid) flush(96, 44, 158, 49);
+      else if (changed(gState.clock, gRendered.clock)) {
+        int x = 101;
+        for (unsigned i = 0; i < 5; ++i) {
+          const auto* item = glyph(gState.clock[i], 43);
+          if (item && gState.clock[i] != gRendered.clock[i]) flush(x, 44, item->advance + 1, 49);
+          if (item) x += item->advance;
         }
-        uiBitmap(x + 10, y + 28 + line, 64, 1, row);
       }
-    } else drawText(x + 10, y + 31, card.waiting ? "WAITING FOR INPUT" : "WORKING", 1, card.waiting ? kYellow : kRed);
-  }
-}
-//  在内存中完成区域绘制，再一次传送最终像素 / Finish each region in memory before transferring its final pixels
-void flushTaskRegion(int16_t x, int16_t y, int16_t width, int16_t height, unsigned part) {
-  gBufferX = x; gBufferY = y; gBufferWidth = width; gBufferHeight = height;
-  std::memset(gTaskBuffer, 0, width * height * sizeof(uint16_t));
-  gTaskBuffering = true;
-  drawTaskScreen(part);
-  gTaskBuffering = false;
-  OmiPetDisplay::lcd.drawBitmap(x, y, width, height, gTaskBuffer);
-}
-void refreshTasks() {
-  const auto& old = gRenderedTaskScreen;
-  const bool full = !gTaskRendered || old.available != gTaskScreen.available ||
-                    (old.active == 0) != (gTaskScreen.active == 0);
-  if (full) OmiPetDisplay::lcd.fillScreen(kBackground);
-  if (full || old.active != gTaskScreen.active) {
-    flushTaskRegion(0, 0, kScreenWidth, 20, 0);
-    flushTaskRegion(0, 130, kScreenWidth, 12, 0);
-  }
-  if (full && (!gTaskScreen.available || !gTaskScreen.active))
-    flushTaskRegion(0, 60, kScreenWidth, 20, 0);
-  if (gTaskScreen.available && gTaskScreen.active) for (unsigned slot = 0; slot < 4; ++slot) {
-    const auto& card = gTaskScreen.cards[slot];
-    const auto& previous = old.cards[slot];
-    const int16_t x = 4 + (slot % 2) * 214, y = 21 + (slot / 2) * 54;
-    if (full || previous.used != card.used) {
-      flushTaskRegion(x, y, 206, 50, slot + 1);
-    } else if (card.used) {
-      if (std::memcmp(previous.pixels, card.pixels, 320) != 0)
-        flushTaskRegion(x + 10, y + 6, 160, 16, slot + 1);
-      if (previous.waiting != card.waiting || old.hasLabels != gTaskScreen.hasLabels ||
-          std::memcmp(old.labels, gTaskScreen.labels, 256) != 0)
-        flushTaskRegion(x + 10, y + 28, 160, 16, slot + 1);
+      if (changed(gState.date, gRendered.date)) flush(96, 96, 158, 22);
+      if (changed(gState.temperature, gRendered.temperature)) flush(267, 55, 149, 29);
+      if (changed(gState.humidity, gRendered.humidity)) flush(267, 102, 149, 27);
+      if (gState.timeValid != gRendered.timeValid) flush(330, 123, 98, 19);
+    } else if (current == Page::Tasks) {
+      if (gTasks.active != gRenderedTasks.active) flush(0, 125, kWidth, 17);
+      for (unsigned i = 0; i < 4; ++i) {
+        const auto& card = gTasks.cards[i];
+        const auto& old = gRenderedTasks.cards[i];
+        const int x = 12 + (i % 2) * 208, y = 31 + (i / 2) * 49;
+        if (card.used != old.used) flush(x, y, 196, 45);
+        else if (card.used) {
+          if (std::memcmp(card.pixels, old.pixels, sizeof(card.pixels)) != 0) flush(x + 12, y + 4, 160, 16);
+          if (card.waiting != old.waiting) flush(x, y + 9, 3, 29);
+          if (card.waiting != old.waiting || gTasks.hasLabels != gRenderedTasks.hasLabels ||
+              std::memcmp(gTasks.labels, gRenderedTasks.labels, sizeof(gTasks.labels)) != 0)
+            flush(x + 9, y + 25, 92, 18);
+        }
+      }
+    } else if (current == Page::Pairing) {
+      if (changed(gState.pairingCode, gRendered.pairingCode)) flush(100, 53, 228, 44);
+      if (changed(gState.pairingAddress, gRendered.pairingAddress)) flush(12, 110, 200, 23);
+      if (gState.pairingSeconds != gRendered.pairingSeconds) flush(302, 111, 108, 18);
     }
   }
-  gRenderedTaskScreen = gTaskScreen;
-  gTaskRendered = true;
+  gRendered = gState;
+  gRenderedTasks = gTasks;
+  gRenderedPage = current;
+  gRenderedValid = true;
 }
 }  //  匿名命名空间 / Anonymous namespace
 
-//  初始化界面时钟、静态布局和首帧内容 / Initialize the UI clock, static layout, and first frame
 void begin() {
-  gDateTimeRendered = false;
-  drawStaticUi();
-  gUiStarted = true;
+  gStarted = true;
+  gFullRow = -1;
+  flush(0, 0, kWidth, kHeight);
+  gRendered = gState;
+  gRenderedTasks = gTasks;
+  gRenderedPage = page();
+  gRenderedValid = true;
 }
 
-//  保存温湿度数据并只更新变化的读数 / Store environment data and update only changed readings
 void setEnvironment(float temperatureC, float humidityPercent, bool valid) {
-  char oldTemperatureText[12] = {};
-  char oldHumidityText[10] = {};
-  formatEnvironmentValues(gEnvironmentValid, gTemperatureC, gHumidityPercent,
-                          oldTemperatureText, sizeof(oldTemperatureText),
-                          oldHumidityText, sizeof(oldHumidityText));
-  gTemperatureC = temperatureC;
-  gHumidityPercent = humidityPercent;
-  gEnvironmentValid = valid;
-  if (gUiStarted && !taskPageVisible()) {
-    char newTemperatureText[12] = {};
-    char newHumidityText[10] = {};
-    formatEnvironmentValues(gEnvironmentValid, gTemperatureC, gHumidityPercent,
-                            newTemperatureText, sizeof(newTemperatureText),
-                            newHumidityText, sizeof(newHumidityText));
-    const bool temperatureChanged =
-        std::strcmp(oldTemperatureText, newTemperatureText) != 0;
-    const bool humidityChanged =
-        std::strcmp(oldHumidityText, newHumidityText) != 0;
-    if (temperatureChanged || humidityChanged) {
-      drawEnvironmentValues(temperatureChanged, humidityChanged);
-    }
+  if (valid && std::isfinite(temperatureC) && std::isfinite(humidityPercent)) {
+    std::snprintf(gState.temperature, sizeof(gState.temperature), "%.1f", static_cast<double>(temperatureC));
+    std::snprintf(gState.humidity, sizeof(gState.humidity), "%.0f", static_cast<double>(humidityPercent));
+  } else {
+    std::strcpy(gState.temperature, "--");
+    std::strcpy(gState.humidity, "--");
   }
 }
 
-//  保存电量状态，仅在有效性或可见百分比变化时刷新 / Store battery state and refresh only when validity or the visible percentage changes
 void setBatteryStatus(uint8_t percent, bool valid) {
-  if (gBatteryValid == valid && (!valid || gBatteryPercent == percent)) {
-    return;
-  }
-  gBatteryPercent = percent;
-  gBatteryValid = valid;
-  if (gUiStarted && !taskPageVisible()) {
-    drawBatteryStatus(false);
-  }
+  gState.battery = valid ? std::min<uint8_t>(percent, 100) : 0;
+  gState.batteryValid = valid;
 }
 
-//  保存联网状态，仅在状态变化时刷新屏幕 / Store network state and refresh only when it changes
-void setNetworkStatus(bool connected, bool provisioning, const char* ssid) {
-  const char* safeSsid = ssid == nullptr ? "" : ssid;
-  if (gNetworkConnected == connected &&
-      gNetworkProvisioning == provisioning &&
-      std::strcmp(gWifiName, safeSsid) == 0) {
-    return;
-  }
-
-  gNetworkConnected = connected;
-  gNetworkProvisioning = provisioning;
-  std::strncpy(gWifiName, safeSsid, sizeof(gWifiName) - 1U);
-  gWifiName[sizeof(gWifiName) - 1U] = '\0';
-  if (gUiStarted && !taskPageVisible()) {
-    drawNetworkStatus(false);
-  }
+void setNetworkStatus(bool connected, bool provisioning, const char*) {
+  gState.network = connected;
+  gState.provisioning = provisioning;
 }
 
-//  保存联网时间和日期，仅在显示内容变化时刷新 / Store network time and date and refresh only when the display changes
-void setDateTime(bool valid, int year, int month, int day, int hour,
-                 int minute) {
-  const bool changed =
-      gDateTimeValid != valid || gDateTimeYear != year ||
-      gDateTimeMonth != month || gDateTimeDay != day ||
-      gDateTimeHour != hour || gDateTimeMinute != minute;
-  if (!changed) {
-    return;
-  }
-
-  gDateTimeValid = valid;
-  gDateTimeYear = year;
-  gDateTimeMonth = month;
-  gDateTimeDay = day;
-  gDateTimeHour = hour;
-  gDateTimeMinute = minute;
-  if (gUiStarted && !taskPageVisible()) {
-    drawDateTime();
-  }
-}
-
-//  保存语音状态文本，仅在文本变化时刷新屏幕 / Store voice-status text and refresh only when it changes
-void setVoiceStatus(const char* statusText) {
-  if (statusText == nullptr || std::strcmp(gVoiceStatus, statusText) == 0) {
-    return;
-  }
-
-  gVoiceStatus = statusText;
-  if (gUiStarted && !taskPageVisible()) {
-    drawVoiceStatus(false);
-  }
-}
-
-//  只接受恰好六位数字；清除后恢复原时钟和日期 / Accept exactly six decimal digits; restore the clock and date when cleared
-void setPairingCode(const char* sixDigits, uint16_t secondsRemaining, const char* address) {
-  bool valid = sixDigits != nullptr && secondsRemaining > 0U &&
-               secondsRemaining <= 300U && std::strlen(sixDigits) == 6U;
+void setDateTime(bool valid, int year, int month, int day, int hour, int minute) {
+  valid = valid && year >= 1 && year <= 9999 && month >= 1 && month <= 12 &&
+          day >= 1 && day <= 31 && hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59;
+  gState.timeValid = valid;
   if (valid) {
-    for (size_t index = 0; index < 6; ++index) {
-      if (sixDigits[index] < '0' || sixDigits[index] > '9') valid = false;
-    }
+    std::snprintf(gState.clock, sizeof(gState.clock), "%02d:%02d", hour, minute);
+    std::snprintf(gState.date, sizeof(gState.date), "%04d/%02d/%02d", year, month, day);
+  } else {
+    std::strcpy(gState.clock, "--:--");
+    std::strcpy(gState.date, "----/--/--");
   }
-  if (!valid) {
-    if (!gPairingVisible) return;
-    gPairingVisible = false;
-    gTaskDirty = true;
-    gTaskRendered = false;
-    volatile char* codeBytes = gPairingCode;
-    for (size_t index = 0; index < sizeof(gPairingCode); ++index) {
-      codeBytes[index] = '\0';
-    }
-    gPairingSecondsRemaining = 0;
-    gPairingCountdownRendered = false;
-    if (gUiStarted && !taskPageVisible()) {
-      OmiPetDisplay::lcd.fillRect(kCenterCardLeft + 2, kCenterCardTop + 2,
-                                  kCenterCardWidth - 4, kCenterCardHeight - 4,
-                                  kBackground);
-      drawCenteredTextInArea(kCenterCardLeft, kCenterCardWidth, 19, "OMIPET",
-                             1, kAccent);
-      gDateTimeRendered = false;
-      drawDateTime();
-    }
-    return;
-  }
+}
 
-  char nextAddress[sizeof(gPairingAddress)] = {};
-  if (address) std::strncpy(nextAddress, address, sizeof(nextAddress) - 1);
-  const bool codeChanged = !gPairingVisible || std::strcmp(gPairingAddress, nextAddress) != 0 ||
-                           std::strcmp(gPairingCode, sixDigits) != 0;
-  if (!codeChanged && gPairingSecondsRemaining == secondsRemaining) return;
-  const bool enteringPairing = !gPairingVisible;
-  gPairingVisible = true;
-  if (enteringPairing && gTaskEnabled && gUiStarted) { gTaskRendered = false; drawStaticUi(); }
-  gPairingSecondsRemaining = secondsRemaining;
-  if (codeChanged) {
-    std::memcpy(gPairingAddress, nextAddress, sizeof(gPairingAddress));
-    std::memcpy(gPairingCode, sixDigits, sizeof(gPairingCode));
-    if (gUiStarted && !taskPageVisible()) drawPairingCard();
-  } else if (gUiStarted && !taskPageVisible()) {
-    drawPairingCountdown();
+void setVoiceStatus(const char* statusText) {
+  if (!statusText) return;
+  std::snprintf(gState.voice, sizeof(gState.voice), "%s", statusText);
+}
+
+void setPairingCode(const char* sixDigits, uint16_t secondsRemaining, const char* address) {
+  bool valid = sixDigits && secondsRemaining > 0 && secondsRemaining <= 300 && std::strlen(sixDigits) == 6;
+  if (valid) for (unsigned i = 0; i < 6; ++i) valid = valid && sixDigits[i] >= '0' && sixDigits[i] <= '9';
+  if (valid) {
+    std::memcpy(gState.pairingCode, sixDigits, 7);
+    std::snprintf(gState.pairingAddress, sizeof(gState.pairingAddress), "%s", address ? address : "");
+    gState.pairingSeconds = secondsRemaining;
+  } else {
+    volatile char* code = gState.pairingCode;
+    for (unsigned i = 0; i < sizeof(gState.pairingCode); ++i) code[i] = 0;
+    gState.pairingSeconds = 0;
+    gState.pairingAddress[0] = 0;
   }
 }
-//  保留 UI 更新入口，时间内容由联网时间状态驱动 / Keep the UI update entry point driven by network time state
+
 void setTaskScreen(bool enabled, bool connected, const OmiPetProtocol::TaskScreen* screen) {
-  enabled = enabled && connected;
-  OmiPetProtocol::TaskScreen empty;
-  const auto& next = screen ? *screen : empty;
-  bool changed = gTaskEnabled != enabled || gTaskConnected != connected ||
-                 gTaskScreen.available != next.available || gTaskScreen.active != next.active ||
-                 gTaskScreen.hasLabels != next.hasLabels || std::memcmp(gTaskScreen.labels, next.labels, 256) != 0;
-  for (unsigned i = 0; i < 4; ++i) {
-    changed = changed || gTaskScreen.cards[i].used != next.cards[i].used ||
-              gTaskScreen.cards[i].waiting != next.cards[i].waiting ||
-              std::memcmp(gTaskScreen.cards[i].pixels, next.cards[i].pixels, 320) != 0;
-  }
-  if (!changed) return;
-  gTaskDirty = true;
-  if (gTaskEnabled != enabled) gTaskRendered = false;
-  gTaskEnabled = enabled;
-  gTaskConnected = connected;
-  gTaskScreen = next;
+  gState.tasks = enabled && connected;
+  gTasks = screen ? *screen : OmiPetProtocol::TaskScreen{};
 }
-void update() {
-  if (gTaskDirty && !gPairingVisible && gUiStarted) {
-    if (gTaskEnabled) {
-      refreshTasks();
-      gTaskDirty = false;
-    } else { gTaskDirty = false; gDateTimeRendered = false; drawStaticUi(); }
-  }
-  if (!gPairingVisible && !gTaskEnabled) drawDateTime();
-}
+
+void update() { refresh(); }
 }  //  OmiPetUi 命名空间 / OmiPetUi namespace

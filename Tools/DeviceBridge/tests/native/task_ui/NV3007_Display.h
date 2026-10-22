@@ -12,6 +12,7 @@ class Display {
   unsigned bitmaps = 0;
   unsigned titleRows = 0;
   unsigned maxFill = 0;
+  unsigned maxBitmap = 0;
   static constexpr uint16_t color565(uint8_t r, uint8_t g, uint8_t b) {
     return ((r & 248) << 8) | ((g & 252) << 3) | (b >> 3);
   }
@@ -23,6 +24,8 @@ class Display {
   }
   void fillScreen(uint16_t color) { fillRect(0,0,428,142,color); }
   void drawBitmap(int x,int y,int w,int h,const uint16_t* data) {
+    if (w <= 0 || h <= 0 || w * h > 206 * 50) throw std::runtime_error("UI region budget");
+    maxBitmap = std::max(maxBitmap, static_cast<unsigned>(w * h));
     ++bitmaps;
     if (w == 160 && h == 1) ++titleRows;
     for(int row=0;row<h;++row) for(int col=0;col<w;++col) fillRect(x+col,y+row,1,1,data[row*w+col]);
