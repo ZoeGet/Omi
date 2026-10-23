@@ -1,12 +1,35 @@
-# Omi
+<div align="center">
 
-ESP32-S3 桌面伙伴：离线中文语音、环境显示、灯光控制，以及 Windows 上的 Codex 任务状态监控。
+<h1>Omi | 桌面伙伴</h1>
 
-> **English** — Omi is an experimental ESP32-S3 desktop companion with offline Chinese voice commands, environmental sensing, lighting, and a Windows app for Codex task monitoring.
+<h3>让桌面多一点陪伴，让任务进度看得见。</h3>
+
+<p>离线中文语音 · 环境显示 · 灯光控制 · Codex 任务状态监控</p>
+
+<p><em>An experimental ESP32-S3 desktop companion with offline Chinese voice commands,<br>environmental sensing, lighting, and a Windows app for Codex task monitoring.</em></p>
+
+<p>
+  <a href="https://github.com/ZoeGet/Omi/releases/tag/v1.0.1"><img src="https://img.shields.io/badge/version-v1.0.1-blue" alt="Windows 软件版本 v1.0.1"></a>
+  <img src="https://img.shields.io/badge/platform-Windows-0078D4" alt="桌面软件平台 Windows">
+  <img src="https://img.shields.io/badge/hardware-ESP32--S3-orange" alt="硬件 ESP32-S3">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--2.0-green" alt="软件许可 GPL-2.0"></a>
+  <img src="https://img.shields.io/badge/status-Prototype-yellow" alt="原型开发阶段">
+</p>
+
+<p>
+  <a href="https://github.com/ZoeGet/Omi/releases">下载 Windows 软件</a> ·
+  <a href="Tools/Desktop/QUICK_START.md">使用指南</a> ·
+  <a href="#可以做什么--features">功能介绍</a> ·
+  <a href="Firmware/README.md">固件开发</a> ·
+  <a href="#硬件资料--hardware-resources">硬件资料</a> ·
+  <a href="CONTRIBUTING.md">参与贡献</a>
+</p>
+
+</div>
+
+---
 
 **项目处于原型开发阶段。** 基础硬件和语音已有实测，桌面/无线功能需要配套的隔离固件；长期稳定性与部分异常边界仍待验证。语音采用有限词表，不支持开放域对话、云端语音或 TTS。
-
-[下载 Windows 软件](https://github.com/ZoeGet/Omi/releases) · [使用指南](Tools/Desktop/QUICK_START.md) · [固件开发](Firmware/README.md) · [硬件资料](#硬件资料--hardware-resources) · [参与贡献](CONTRIBUTING.md)
 
 ## 可以做什么 / Features
 
