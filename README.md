@@ -2,8 +2,6 @@
 
 <h1>Omi</h1>
 
-<h3>让桌面多一点陪伴，让任务进度看得见。</h3>
-
 <p>离线中文语音 · 环境显示 · 灯光控制 · Codex 任务状态监控</p>
 
 <p><em>An experimental ESP32-S3 desktop companion with offline Chinese voice commands,<br>environmental sensing, lighting, and a Windows app for Codex task monitoring.</em></p>
